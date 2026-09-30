@@ -2,7 +2,7 @@
 // SUPABASE_URL dan SUPABASE_ANON_KEY diambil dari Supabase: Project Settings → API.
 // Kalau dikosongkan, aplikasi berjalan dalam MODE CONTOH (data hanya di perangkat ini).
 window.APP_CONFIG = {
-  SUPABASE_URL: '',
+  SUPABASE_URL: 'https://bqqmglgsyjbvrnhmmxgz.supabase.co',
   SUPABASE_ANON_KEY: '',
 
   store: {
