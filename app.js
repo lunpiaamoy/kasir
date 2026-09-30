@@ -285,7 +285,7 @@
       ${kv([['NAMA', esc(o.customer_name.toUpperCase() || '-')], ['WA', esc(o.customer_wa || '-')]])}
       <div class="r-gap"></div>
       <table class="items">
-        <thead><tr><th>PRODUK</th><th>JML</th><th>HARGA</th><th>SUB</th></tr></thead>
+        <thead><tr><th>PRODUK</th><th>PCS</th><th>RP</th><th>SUB</th></tr></thead>
         <tbody>
           ${[...cats].map(([cat, items]) => `
             <tr class="r-cat"><td colspan="4">${esc(cat.toUpperCase())}</td></tr>
@@ -300,7 +300,7 @@
         ${o.pay_method === 'tunai' ? `<tr><td>KEMBALIAN</td><td>${rp(o.change)}</td></tr>` : ''}
       </table>
       <div class="r-gap"></div>
-      ${kv([['NO', notaNo(o)], ['TANGGAL', dmy(created)]])}
+      ${kv([['NO', notaNo(o)], ['TANGGAL', dmy(created)], ['WAKTU', `${pad(created.getHours())}.${pad(created.getMinutes())}`]])}
       ${fulRows}
       ${o.status === 'batal' ? '<div class="r-gap"></div><div class="r-c"><b>*** DIBATALKAN ***</b></div>' : ''}
     `;
