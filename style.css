@@ -323,7 +323,7 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 .receipt .items .r-cat td { font-weight: 700; padding-top: 1.5mm; }
 .receipt .tot td { font-weight: 700; }
 .receipt .tot td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.receipt .r-rule { border-top: 1px dashed #000; margin: 2mm 0; }
+.receipt .r-rule { border-top: 1px dashed #000; margin: 1.5mm 0; }
 
 /* ---------- Toast ---------- */
 .toast {
