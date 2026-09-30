@@ -135,14 +135,21 @@
         const { data, error } = await sb.from('cash_days').select('*').gte('day', fromDay).order('day', { ascending: false });
         fail(error); return data;
       },
-      async openCash(day, opening) {
-        const { error } = await sb.from('cash_days').upsert({ day, opening }, { onConflict: 'day' }); fail(error);
+      // Rincian pecahan (opening_detail/counted_detail) butuh 003_pecahan_kas.sql. Kalau kolomnya
+      // belum ada (PGRST204), simpan totalnya saja supaya kas tetap bisa dibuka/ditutup.
+      async openCash(day, opening, opening_detail = null) {
+        const run = row => sb.from('cash_days').upsert(row, { onConflict: 'day' });
+        let { error } = await run({ day, opening, opening_detail });
+        if (error?.code === 'PGRST204') ({ error } = await run({ day, opening }));
+        fail(error);
       },
       async closeCash(day, f) {
         const { data: s } = await sb.auth.getSession();
-        const { data, error } = await sb.from('cash_days')
-          .update({ ...f, closed_at: new Date().toISOString(), closed_by: s.session?.user?.email })
+        const run = row => sb.from('cash_days')
+          .update({ ...row, closed_at: new Date().toISOString(), closed_by: s.session?.user?.email })
           .eq('day', day).select();
+        let { data, error } = await run(f);
+        if (error?.code === 'PGRST204') { const { counted_detail, ...rest } = f; ({ data, error } = await run(rest)); }
         fail(error);
         if (!data.length) throw new Error('Kas ini sudah ditutup. Hanya pemilik yang bisa mengubahnya.');
       },
@@ -299,9 +306,9 @@
       async listCashDays(fromDay) {
         return clone(Object.values(load().cash || {}).filter(c => c.day >= fromDay).sort((a, b) => b.day.localeCompare(a.day)));
       },
-      async openCash(day, opening) {
+      async openCash(day, opening, opening_detail = null) {
         const db = load(); db.cash ||= {};
-        db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening };
+        db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening, opening_detail };
         save();
       },
       async closeCash(day, f) {

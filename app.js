@@ -355,6 +355,16 @@
   }
   // Nota lewat WhatsApp toko: membuka chat dengan pesan yang sudah terisi, kasir tinggal kirim
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
+  // Laptop: WhatsApp Web langsung ke chat pembeli, selalu di tab yang sama (nama 'lunpia-wa'),
+  // jadi setelah pertama kali tidak membuka tab baru lagi. HP: langsung aplikasi WhatsApp.
+  // Tab WhatsApp Web yang dibuka sendiri (bukan dari aplikasi ini) tidak bisa dipakai: dibatasi browser.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  function openWa(phone, text = '') {
+    const num = waNumber(phone), t = text ? encodeURIComponent(text) : '';
+    if (isMobile) return void (location.href = `https://wa.me/${num}${t ? '?text=' + t : ''}`);
+    const w = window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${t}`, 'lunpia-wa');
+    w?.focus();
+  }
   function waText(o) {
     const d = new Date(o.created_at);
     const lines = [
@@ -375,7 +385,7 @@
   let receiptOrder = null;
   $('waBtn').addEventListener('click', () => {
     const o = receiptOrder; if (!o) return;
-    window.open(`https://wa.me/${waNumber(o.customer_wa)}?text=${encodeURIComponent(waText(o))}`, '_blank', 'noopener');
+    openWa(o.customer_wa, waText(o));
   });
 
   function showReceipt(order, autoPrint = false) {
@@ -428,7 +438,7 @@
                 <span class="order-time">${hhmm(o.fulfill_time) || '--.--'}</span>
                 <span class="chip ${o.fulfillment === 'kirim' ? 'warn' : 'plain'}">${FUL_LABEL[o.fulfillment]}</span>
               </div>
-              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· <a href="https://wa.me/${esc(waNumber(o.customer_wa))}" target="_blank" rel="noopener">${esc(o.customer_wa)}</a>` : ''}</div>
+              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· <button class="link wa-link" data-wachat="${esc(o.customer_wa)}">${esc(o.customer_wa)}</button>` : ''}</div>
               <div class="order-items">${esc(itemsSummary(o))}</div>
               ${o.note ? `<div class="order-note">Catatan: ${esc(o.note)}</div>` : ''}
               <div class="order-total"><span>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'} · Nota ${notaNo(o)}</span><span>${rp(o.total)}</span></div>
@@ -473,6 +483,7 @@
     const d = t.dataset;
     try {
       if (d.reprint) showReceipt(orderCache.get(Number(d.reprint)));
+      else if (d.wachat) openWa(d.wachat);
       else if (d.done) { await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders(); }
       else if (d.editorder) startEdit(orderCache.get(Number(d.editorder)));
       else if (d.cancel) {
@@ -788,25 +799,48 @@
     return { day: ymdLocal(from), cd, cash: tunai.reduce((s, o) => s + o.total, 0), n: tunai.length };
   }
 
-  let recount = false;
+  // Uang dihitung per pecahan (ribuan saja; koin ratusan tidak dihitung)
+  const DENOMS = [100000, 50000, 20000, 10000, 5000, 2000, 1000];
+  const shortDenom = d => d >= 1000 ? `${d / 1000}rb` : String(d);
+  const denomTotal = detail => DENOMS.reduce((s, d) => s + d * (Number(detail?.[d]) || 0), 0);
+  const denomSummary = detail => DENOMS.filter(d => Number(detail?.[d]) > 0).map(d => `${shortDenom(d)}×${detail[d]}`).join(' · ');
+  function denomGrid(key, detail) {
+    return `<div class="denoms" data-denoms="${key}">
+      ${DENOMS.map(d => `<label class="denom">
+        <span class="d-face">${rp(d)}</span>
+        <span class="d-x">×</span>
+        <input inputmode="numeric" data-denom="${d}" value="${Number(detail?.[d]) || ''}" placeholder="0" aria-label="Jumlah lembar ${rp(d)}">
+        <span class="d-sub" data-sub="${d}">${Number(detail?.[d]) ? rp(d * detail[d]) : ''}</span>
+      </label>`).join('')}
+      <div class="denom-total">Total <b data-total>Rp ${rp(denomTotal(detail))}</b></div>
+    </div>`;
+  }
+  function readDenoms(key) {
+    const detail = {};
+    $('cashPanel').querySelectorAll(`[data-denoms="${key}"] [data-denom]`).forEach(i => { const n = toInt(i.value); if (n) detail[i.dataset.denom] = n; });
+    return { detail, total: denomTotal(detail), filled: Object.keys(detail).length > 0 };
+  }
+
+  let recount = false, editOpening = false, cashExpected = 0;
+  const diffTxt = d => d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`;
   async function renderCash() {
     renderCashHistory();
     let c;
     try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = `<p class="error">${esc(e.message)}</p>`; return; }
     const { cd, cash, n } = c;
     const head = `<div class="view-head"><h2 id="cashTitle">Kas hari ini</h2><span class="muted">${esc(longDate(new Date()))}</span></div>`;
-    if (!cd) {
+    if (!cd || editOpening) {
       $('cashPanel').innerHTML = `${head}
-        <p class="muted">Isi jumlah uang di laci saat toko buka.</p>
-        <div class="cash-row"><div><label for="cashOpening">Uang awal</label><input id="cashOpening" inputmode="numeric" placeholder="0"></div>
-        <button class="primary" data-cash-open>Simpan uang awal</button></div>`;
+        <p class="muted">Hitung uang di laci saat toko buka: isi jumlah lembar/keping tiap pecahan.</p>
+        ${denomGrid('open', cd?.opening_detail)}
+        <div class="actions"><button class="primary" data-cash-open>Simpan uang awal</button>
+        ${editOpening ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}</div>`;
       return;
     }
-    const expected = cd.opening + cash;
+    const expected = cashExpected = cd.opening + cash;
     const closed = cd.closed_at && !recount;
-    const diffTxt = d => d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`;
     const figures = `<div class="metrics">
-        <div class="metric"><small>Uang awal</small><b>Rp ${rp(cd.opening)}</b><span>${esc((cd.opened_by || '').split('@')[0])}</span></div>
+        <div class="metric"><small>Uang awal</small><b>Rp ${rp(cd.opening)}</b><span>${esc(denomSummary(cd.opening_detail) || (cd.opened_by || '').split('@')[0])}</span></div>
         <div class="metric"><small>Penjualan tunai</small><b>Rp ${rp(closed ? cd.expected - cd.opening : cash)}</b><span>${closed ? 'saat tutup' : n + ' transaksi'}</span></div>
         <div class="metric lead"><small>Seharusnya di laci</small><b>Rp ${rp(closed ? cd.expected : expected)}</b><span>Ongkir tidak dihitung</span></div>
         ${closed ? `<div class="metric"><small>Uang dihitung</small><b>Rp ${rp(cd.counted)}</b><span>${diffTxt(cd.counted - cd.expected)}</span></div>` : ''}
@@ -814,22 +848,39 @@
     if (closed) {
       const t = new Date(cd.closed_at);
       $('cashPanel').innerHTML = `${head}${figures}
+        ${cd.counted_detail ? `<p class="muted">Rincian hitungan: ${esc(denomSummary(cd.counted_detail))}</p>` : ''}
         <p class="muted">Kasir ditutup pukul ${pad(t.getHours())}.${pad(t.getMinutes())} oleh ${esc((cd.closed_by || '').split('@')[0])}${cd.note ? ' · ' + esc(cd.note) : ''}
         ${isOwner() ? ' · <button class="link" data-cash-recount>Hitung ulang</button>' : ''}</p>`;
       return;
     }
     $('cashPanel').innerHTML = `${head}${figures}
+      <p class="muted">Tutup kasir: hitung uang di laci per pecahan. ${recount ? '' : '<button class="link" data-cash-editopen>Ubah uang awal</button>'}</p>
+      ${denomGrid('count', recount ? cd.counted_detail : null)}
+      <p class="cash-diff" id="cashDiff"></p>
       <div class="cash-row">
-        <div><label for="cashCounted">Uang dihitung di laci</label><input id="cashCounted" inputmode="numeric" placeholder="0" value="${recount && cd.counted != null ? rp(cd.counted) : ''}"></div>
         <div class="grow"><label for="cashNote">Catatan</label><input id="cashNote" autocomplete="off" value="${recount ? esc(cd.note || '') : ''}"></div>
         <button class="primary" data-cash-close>Tutup kasir</button>
-      </div>
-      <p class="muted cash-diff" id="cashDiff"></p>`;
-    $('cashCounted').addEventListener('input', () => {
-      const v = toInt($('cashCounted').value);
-      $('cashDiff').innerHTML = $('cashCounted').value ? `Selisih: ${diffTxt(v - expected)}` : '';
-    });
+        ${recount ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}
+      </div>`;
+    updateDenoms('count');
   }
+  // Subtotal, total, dan selisih ikut berubah saat jumlah lembar diisi
+  function updateDenoms(key) {
+    const box = $('cashPanel').querySelector(`[data-denoms="${key}"]`); if (!box) return;
+    const { detail, total, filled } = readDenoms(key);
+    DENOMS.forEach(d => { box.querySelector(`[data-sub="${d}"]`).textContent = detail[d] ? rp(d * detail[d]) : ''; });
+    box.querySelector('[data-total]').textContent = `Rp ${rp(total)}`;
+    if (key === 'count') $('cashDiff').innerHTML = filled ? `Seharusnya Rp ${rp(cashExpected)} · Selisih: ${diffTxt(total - cashExpected)}` : '';
+  }
+  $('cashPanel').addEventListener('input', e => {
+    const box = e.target.closest('[data-denoms]'); if (box) updateDenoms(box.dataset.denoms);
+  });
+  $('cashPanel').addEventListener('keydown', e => {   // Enter pindah ke pecahan berikutnya
+    if (e.key !== 'Enter' || !e.target.matches('[data-denom]')) return;
+    e.preventDefault();
+    const all = [...e.target.closest('[data-denoms]').querySelectorAll('[data-denom]')];
+    all[all.indexOf(e.target) + 1]?.focus();
+  });
   async function renderCashHistory() {
     const from = new Date(); from.setDate(from.getDate() - 13);
     let days;
@@ -856,19 +907,20 @@
     const day = ymdLocal(todayRange()[0]);
     try {
       if ('cashOpen' in t.dataset) {
-        if (!$('cashOpening').value.trim()) return toast('Isi uang awal (boleh 0)', true);
-        await DB.openCash(day, toInt($('cashOpening').value)); toast('Uang awal disimpan'); renderCash(); refreshNotices();
+        const { detail, total } = readDenoms('open');
+        await DB.openCash(day, total, detail); editOpening = false;
+        toast(`Uang awal Rp ${rp(total)} disimpan`); renderCash(); refreshNotices();
       } else if ('cashClose' in t.dataset) {
-        if (!$('cashCounted').value.trim()) return toast('Isi jumlah uang yang dihitung', true);
+        const { detail, total, filled } = readDenoms('count');
+        if (!filled) return toast('Isi jumlah lembar uang yang dihitung', true);
         const c = await cashToday();   // hitung ulang supaya transaksi terakhir ikut
-        await DB.closeCash(day, { expected: c.cd.opening + c.cash, counted: toInt($('cashCounted').value), note: $('cashNote').value.trim() });
+        await DB.closeCash(day, { expected: c.cd.opening + c.cash, counted: total, counted_detail: detail, note: $('cashNote').value.trim() });
         recount = false; toast('Kasir ditutup'); renderCash();
       } else if ('cashRecount' in t.dataset) { recount = true; renderCash(); }
+      else if ('cashEditopen' in t.dataset) { editOpening = true; renderCash(); }
+      else if ('cashCancel' in t.dataset) { recount = editOpening = false; renderCash(); }
     } catch (err) { toast(err.message, true); }
   });
-  $('cashPanel').addEventListener('blur', e => {
-    if (e.target.matches('#cashOpening, #cashCounted')) { const v = toInt(e.target.value); if (e.target.value.trim()) e.target.value = rp(v); }
-  }, true);
 
   // Pengingat di halaman Kasir: uang awal belum diisi, pesanan hari ini & besok
   async function refreshNotices() {
