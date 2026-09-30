@@ -247,12 +247,17 @@
     if (v !== 'langsung' && !$('fDate').value) $('fDate').value = ymdLocal(new Date());
   });
 
-  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10:30).
-  // Angka ke-5 memulai lagi dari jam. Batas: jam 00–24, menit 00–59 (24 hanya 24:00).
-  // Angka pertama 3–9 otomatis jadi jam 03–09; angka menit pertama 6–9 jadi menit 06–09.
-  // Nilai disimpan sebagai "HH:MM".
+  // Pukul: titik dua selalu tampil sebagai pola jj:mm (1 → "1_:__", 10 → "10:__", 1030 → "10:30").
+  // Ketik 4 angka: 2 pertama jam, 2 berikutnya menit; angka ke-5 memulai lagi dari jam.
+  // Batas: jam 00–24 (24 hanya 24:00), menit 00–59. Angka jam pertama 3–9 jadi 03–09,
+  // angka menit pertama 6–9 jadi 06–09. Nilai disimpan sebagai "HH:MM".
   const timeDigits = () => $('fTime').value.replace(/\D/g, '').slice(0, 4);
-  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d);
+  const showTime = d => {
+    const inp = $('fTime');
+    inp.value = d ? `${d.slice(0, 2).padEnd(2, '_')}:${d.slice(2).padEnd(2, '_')}` : '';
+    const pos = d.length <= 2 ? d.length : d.length + 1;   // kursor di angka berikutnya
+    if (document.activeElement === inp) inp.setSelectionRange(pos, pos);
+  };
   const timeValue = () => { const d = timeDigits(); return d.length === 4 ? `${d.slice(0, 2)}:${d.slice(2)}` : ''; };
   const timeValid = () => {
     const d = timeDigits(), h = +d.slice(0, 2), m = +d.slice(2);
@@ -267,13 +272,17 @@
     return d + ch;
   }
   $('fTime').addEventListener('beforeinput', e => {
-    if (!e.inputType.startsWith('insert')) return;   // hapus/backspace biarkan
-    e.preventDefault();
-    let d = timeDigits();
+    const inp = $('fTime');
+    e.preventDefault();   // semua perubahan diatur di sini supaya pola jj:mm tetap utuh
+    const all = inp.value && inp.selectionStart === 0 && inp.selectionEnd === inp.value.length;
+    let d = all ? '' : timeDigits();
+    if (e.inputType.startsWith('delete')) return showTime(all ? '' : d.slice(0, -1));
+    if (!e.inputType.startsWith('insert')) return;
     for (const ch of (e.data || '').replace(/\D/g, '')) d = addTimeDigit(d, ch);
     showTime(d);
   });
-  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan pemisahnya
+  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // cadangan (mis. isi otomatis browser)
+  $('fTime').addEventListener('focus', () => setTimeout(() => showTime(timeDigits()), 0));   // kursor ke posisi berikutnya
 
   // Pembayaran
   $('paySeg').addEventListener('click', e => {
@@ -352,7 +361,7 @@
     if (ful !== 'langsung') {
       if (!$('custName').value.trim()) return err('Isi nama pembeli untuk pesanan ambil/kirim.');
       if (!$('fDate').value || !timeDigits()) return err('Isi tanggal dan pukul ' + (ful === 'kirim' ? 'kirim.' : 'ambil.'));
-      if (!timeValid()) return err('Pukul tidak valid. Ketik 4 angka, mis. 1030 untuk 10.30.');
+      if (!timeValid()) return err('Pukul belum lengkap atau tidak valid. Ketik 4 angka, mis. 1030 untuk 10:30.');
     }
     if (pay === 'tunai' && toInt($('paid').value) < total) return err('Uang diterima kurang dari total.');
 
