@@ -246,6 +246,21 @@
     if (v !== 'langsung' && !$('fDate').value) $('fDate').value = ymdLocal(new Date());
   });
 
+  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10.30).
+  // Angka ke-5 memulai lagi dari jam. Nilai disimpan sebagai "HH:MM".
+  const timeDigits = () => $('fTime').value.replace(/\D/g, '').slice(0, 4);
+  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}.${d.slice(2)}` : d);
+  const timeValue = () => { const d = timeDigits(); return d.length === 4 ? `${d.slice(0, 2)}:${d.slice(2)}` : ''; };
+  const timeValid = () => { const d = timeDigits(); return d.length === 4 && +d.slice(0, 2) < 24 && +d.slice(2) < 60; };
+  $('fTime').addEventListener('beforeinput', e => {
+    if (!e.inputType.startsWith('insert')) return;   // hapus/backspace biarkan
+    e.preventDefault();
+    let d = timeDigits();
+    for (const ch of (e.data || '').replace(/\D/g, '')) d = (d.length >= 4 ? '' : d) + ch;
+    showTime(d);
+  });
+  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan titiknya
+
   // Pembayaran
   $('paySeg').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -301,7 +316,7 @@
     o.order_items.forEach(i => { if (i.product_id != null) cart.set(i.product_id, (cart.get(i.product_id) || 0) + i.qty); });
     $('custName').value = o.customer_name || ''; $('custWa').value = o.customer_wa || ''; $('orderNote').value = o.note || '';
     setFulfill(o.fulfillment);
-    $('fDate').value = o.fulfill_date || ''; $('fTime').value = (o.fulfill_time || '').slice(0, 5);
+    $('fDate').value = o.fulfill_date || ''; showTime((o.fulfill_time || '').replace(/\D/g, '').slice(0, 4));
     $('ongkir').value = o.ongkir ? rp(o.ongkir) : '';
     setPay(o.pay_method); $('paid').value = o.pay_method === 'tunai' ? rp(o.paid) : '';
     $('cartTitle').textContent = `Ubah nota ${notaNo(o)}`;
@@ -322,7 +337,8 @@
     if (!cart.size) return err('Keranjang masih kosong.');
     if (ful !== 'langsung') {
       if (!$('custName').value.trim()) return err('Isi nama pembeli untuk pesanan ambil/kirim.');
-      if (!$('fDate').value || !$('fTime').value) return err('Isi tanggal dan pukul ' + (ful === 'kirim' ? 'kirim.' : 'ambil.'));
+      if (!$('fDate').value || !timeDigits()) return err('Isi tanggal dan pukul ' + (ful === 'kirim' ? 'kirim.' : 'ambil.'));
+      if (!timeValid()) return err('Pukul tidak valid. Ketik 4 angka, mis. 1030 untuk 10.30.');
     }
     if (pay === 'tunai' && toInt($('paid').value) < total) return err('Uang diterima kurang dari total.');
 
@@ -332,7 +348,7 @@
       customer_wa: $('custWa').value.trim(),
       fulfillment: ful,
       fulfill_date: ful === 'langsung' ? '' : $('fDate').value,
-      fulfill_time: ful === 'langsung' ? '' : $('fTime').value,
+      fulfill_time: ful === 'langsung' ? '' : timeValue(),
       ongkir: ful === 'kirim' ? toInt($('ongkir').value) : 0,
       pay_method: pay,
       paid: pay === 'tunai' ? toInt($('paid').value) : total,
