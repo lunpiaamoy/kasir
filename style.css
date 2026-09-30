@@ -114,8 +114,7 @@ input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
   width: min(380px, 100%); background: var(--surface); padding: 28px;
   border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(109, 20, 25, .08);
 }
-.login-card img { width: 120px; display: block; margin: 0 auto 8px; }
-.login-card h1 { font-family: var(--f-display); font-weight: 400; font-size: 26px; text-align: center; color: var(--amoy); margin-bottom: 8px; }
+.login-card img { width: 120px; display: block; margin: 0 auto 16px; }
 .login-card .primary { width: 100%; margin-top: 18px; }
 
 /* ---------- Umum ---------- */
