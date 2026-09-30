@@ -4,11 +4,27 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 
 ## Fitur
 
-- **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama dan WA pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk.
-- **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`. Ongkir dicatat terpisah dan tidak masuk total.
-- **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan).
-- **Stok**: tambah atau koreksi stok, tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
-- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, atau rentang tanggal pilihan. Tunai dan QRIS ditampilkan terpisah, lengkap dengan produk terlaris dan rekap per hari.
+- **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama, WA, dan catatan pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk atau kirim nota lewat **WhatsApp**. Di atas halaman kasir muncul pengingat: uang awal belum diisi, pesanan terlewat, dan pesanan hari ini/besok.
+- **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`, dan tidak pernah dipakai ulang walaupun nota dihapus. Ongkir dicatat terpisah dan tidak masuk total.
+- **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan). Pemilik juga bisa **mengubah** dan **menghapus** nota.
+- **Stok**: tambah stok, koreksi stok, tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
+- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**.
+- **Kas harian**: isi uang awal saat buka, lalu **tutup kasir** dengan menghitung uang di laci. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai) dan selisihnya.
+
+## Pemilik dan kasir
+
+| | Pemilik | Kasir |
+|---|:-:|:-:|
+| Transaksi, cetak struk, kirim WA | ✅ | ✅ |
+| Tandai selesai, batalkan pesanan | ✅ | ✅ |
+| Tambah stok masuk, kartu stok, laporan | ✅ | ✅ |
+| Uang awal & tutup kasir | ✅ | ✅ |
+| **Ubah** dan **hapus** nota | ✅ | ❌ |
+| Tambah/ubah produk dan harga | ✅ | ❌ |
+| Koreksi stok (mengurangi) | ✅ | ❌ |
+| Mengubah kas yang sudah ditutup | ✅ | ❌ |
+
+Batasan ini dipasang di database, bukan hanya dengan menyembunyikan tombol.
 
 ## Mode contoh
 
@@ -18,15 +34,35 @@ Kalau `config.js` belum diisi, aplikasi berjalan dalam **mode contoh**: data han
 
 1. Buat project baru di [supabase.com](https://supabase.com). Pilih region **Southeast Asia (Singapore)**.
 2. Buka **SQL Editor → New query**, tempel seluruh isi [`supabase/schema.sql`](supabase/schema.sql), lalu klik **Run**.
-3. Daftarkan email staf yang boleh memakai kasir. Tetap di SQL Editor, jalankan:
+3. Daftarkan email pemilik. Tetap di SQL Editor, jalankan:
    ```sql
    insert into public.staff (email, name) values ('email-kamu@gmail.com', 'Nama');
    ```
-4. Buat akun login untuk setiap staf di **Authentication → Users → Add user → Create new user**, dengan email yang sama dan centang **Auto Confirm User**.
-5. Matikan pendaftaran umum di **Authentication → Sign In / Providers**: nonaktifkan **Allow new users to sign up**.
-6. Salin **Project URL** dan **anon / publishable key** dari **Project Settings → API** ke `config.js`.
+4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql) dengan cara yang sama. Staf yang sudah terdaftar saat file ini dijalankan menjadi **pemilik**.
+5. Buat akun login untuk setiap staf di **Authentication → Users → Add user → Create new user**, dengan email yang sama dan centang **Auto Confirm User**.
+6. Matikan pendaftaran umum di **Authentication → Sign In / Providers**: nonaktifkan **Allow new users to sign up**. Kalau tersedia di paket Anda, nyalakan juga **Leaked password protection**.
+7. Salin **Project URL** dan **anon / publishable key** dari **Project Settings → API** ke `config.js`.
 
 > `anon key` memang dirancang untuk dipakai di browser. **Jangan** pernah memasukkan `service_role` / `secret key` ke aplikasi ini.
+
+### Menambah pegawai (kasir)
+
+Di SQL Editor (staf baru otomatis menjadi kasir):
+```sql
+insert into public.staff (email, name) values ('email-pegawai@gmail.com', 'Nama Pegawai');
+```
+Lalu buat akun loginnya di **Authentication → Users** seperti langkah 5. Untuk menjadikan seseorang pemilik:
+```sql
+update public.staff set role = 'pemilik' where email = 'email-pegawai@gmail.com';
+```
+
+## Memasang di layar utama
+
+Aplikasi bisa dipasang seperti aplikasi biasa, tanpa bilah alamat browser:
+
+- **Android (Chrome)**: buka situsnya → menu ⋮ → **Tambahkan ke layar utama** / **Instal aplikasi**.
+- **iPhone/iPad (Safari)**: buka situsnya → tombol **Bagikan** → **Tambah ke Layar Utama**.
+- **Laptop (Chrome/Edge)**: ikon instal di ujung kanan bilah alamat.
 
 ## Mencetak struk
 
@@ -37,4 +73,4 @@ Tombol **Cetak** membuka jendela Print bawaan perangkat. Pilih printer thermal, 
 
 ## Teknis
 
-HTML, CSS, dan JavaScript biasa, tanpa proses build, dengan [supabase-js](https://github.com/supabase/supabase-js) dari CDN. Semua perhitungan total, nomor nota, dan pengurangan stok dijalankan di database (`create_order`), jadi aman dipakai beberapa kasir sekaligus.
+HTML, CSS, dan JavaScript biasa, tanpa proses build, dengan [supabase-js](https://github.com/supabase/supabase-js) dari CDN. Semua perhitungan total, nomor nota, perubahan stok, ubah/hapus nota, dan pengecekan peran dijalankan di database (fungsi `create_order`, `update_order`, `delete_order`, `cancel_order`, `add_stock`), jadi aman dipakai beberapa kasir sekaligus.

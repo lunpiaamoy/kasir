@@ -9,6 +9,20 @@
     if (error) throw new Error(error.message || String(error));
   }
 
+  // Kartu stok: gabungan riwayat stok manual dan transaksi sejak `fromIso`.
+  // Transaksi batal: keluar saat dibuat, masuk kembali saat dibatalkan. Pembatalan lama
+  // (sebelum waktu batal dicatat) tidak ditampilkan sama sekali karena efeknya nol.
+  function cardEvents(moves, orderRows, fromIso) {
+    const from = new Date(fromIso);
+    const ev = moves.map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by }));
+    orderRows.forEach(o => {
+      if (new Date(o.created_at) >= from) ev.push({ at: o.created_at, delta: -o.qty, order: o, by: o.cashier });
+      if (o.status === 'batal' && o.cancelled_at && new Date(o.cancelled_at) >= from)
+        ev.push({ at: o.cancelled_at, delta: o.qty, order: o, cancel: true });
+    });
+    return ev;
+  }
+
   // ------------------------------------------------------------------ Supabase
   function supabaseDb() {
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
@@ -35,7 +49,8 @@
         throw new Error('Gagal masuk: ' + error.message);
       },
       async signOut() { await sb.auth.signOut(); },
-      async isStaff() { const { data, error } = await sb.rpc('is_staff'); fail(error); return data === true; },
+      // 'pemilik', 'kasir', atau null kalau email belum terdaftar sebagai staf
+      async myRole() { const { data, error } = await sb.rpc('my_role'); fail(error); return data || null; },
 
       async listProducts() {
         const { data, error } = await sb.from('products').select('*').order('sort').order('id');
@@ -68,27 +83,41 @@
           .order('created_at', { ascending: false }).limit(limit);
         fail(error); return data;
       },
-      async setStatus(id, status) { const { error } = await sb.from('orders').update({ status }).eq('id', id); fail(error); },
-      async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
-      // Hapus permanen: stok dikembalikan dulu (cancel_order tidak berbuat apa-apa kalau sudah batal)
-      async deleteOrder(id) {
-        await this.cancelOrder(id);
-        const { error } = await sb.from('orders').delete().eq('id', id); fail(error);
+      async updateOrder(id, payload) {
+        const { data, error } = await sb.rpc('update_order', { p_id: id, p: payload }); fail(error); return data;
       },
+      async markDone(id) { const { error } = await sb.rpc('mark_done', { p_id: id }); fail(error); },
+      async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
+      // Stok dikembalikan dan nota dihapus dalam satu transaksi database (khusus pemilik)
+      async deleteOrder(id) { const { error } = await sb.rpc('delete_order', { p_id: id }); fail(error); },
 
-      // Kartu stok: semua perubahan stok satu produk sejak fromIso sampai sekarang.
-      // Transaksi batal tidak ikut karena stoknya sudah dikembalikan.
       async stockCard(productId, fromIso) {
-        const [moves, sold] = await Promise.all([
+        const cols = 'id, qty, orders!inner(created_at, cancelled_at, status, year, seq, customer_name, cashier)';
+        const [moves, sold, cancelled] = await Promise.all([
           all(() => sb.from('stock_moves').select('id, delta, note, created_by, created_at')
             .eq('product_id', productId).gte('created_at', fromIso).order('id')),
-          all(() => sb.from('order_items').select('id, qty, orders!inner(created_at, status, year, seq, customer_name, cashier)')
+          all(() => sb.from('order_items').select(cols)
             .eq('product_id', productId).gte('orders.created_at', fromIso).neq('orders.status', 'batal').order('id')),
+          all(() => sb.from('order_items').select(cols)
+            .eq('product_id', productId).eq('orders.status', 'batal').gte('orders.cancelled_at', fromIso).order('id')),
         ]);
-        return [
-          ...moves.map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by })),
-          ...sold.map(i => ({ at: i.orders.created_at, delta: -i.qty, order: i.orders, by: i.orders.cashier })),
-        ];
+        return cardEvents(moves, [...sold, ...cancelled].map(i => ({ ...i.orders, qty: i.qty })), fromIso);
+      },
+
+      // Kas harian (tanggal = 'YYYY-MM-DD')
+      async getCashDay(day) {
+        const { data, error } = await sb.from('cash_days').select('*').eq('day', day).maybeSingle(); fail(error); return data;
+      },
+      async openCash(day, opening) {
+        const { error } = await sb.from('cash_days').upsert({ day, opening }, { onConflict: 'day' }); fail(error);
+      },
+      async closeCash(day, f) {
+        const { data: s } = await sb.auth.getSession();
+        const { data, error } = await sb.from('cash_days')
+          .update({ ...f, closed_at: new Date().toISOString(), closed_by: s.session?.user?.email })
+          .eq('day', day).select();
+        fail(error);
+        if (!data.length) throw new Error('Kas ini sudah ditutup. Hanya pemilik yang bisa mengubahnya.');
       },
     };
   }
@@ -125,7 +154,8 @@
       onAuth(cb) { authCb = cb; },
       async signIn() { signedIn = true; authCb({ user: { email: 'contoh@lunpia.local' } }); },
       async signOut() { signedIn = false; },
-      async isStaff() { return true; },
+      // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
+      async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },
 
       async listProducts() { return clone(load().products).sort((a, b) => a.sort - b.sort || a.id - b.id); },
       async saveProduct(p) {
@@ -153,7 +183,9 @@
         const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
         if (paid < total) throw new Error('Uang yang dibayar kurang dari total');
         const year = jakartaYear();
-        const seq = db.orders.filter(o => o.year === year).reduce((m, o) => Math.max(m, o.seq), 0) + 1;
+        db.counters ||= {};
+        const seq = db.counters[year] = Math.max(db.counters[year] || 0,
+          db.orders.filter(o => o.year === year).reduce((m, o) => Math.max(m, o.seq), 0)) + 1;
         const ful = p.fulfillment || 'langsung';
         const order = {
           id: db.nextId++, year, seq, created_at: new Date().toISOString(),
@@ -162,11 +194,40 @@
           ongkir: ful === 'kirim' ? Number(p.ongkir) || 0 : 0,
           total, pay_method: p.pay_method, paid, change: paid - total,
           status: ful === 'langsung' ? 'selesai' : 'menunggu',
+          note: p.note || '', cancelled_at: null, cashier: 'contoh@lunpia.local',
           order_items: items,
         };
         items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
         db.orders.push(order); save();
         return clone(order);
+      },
+      async updateOrder(id, p) {
+        const db = load(); const o = db.orders.find(x => x.id === id);
+        if (!o) throw new Error('Nota tidak ditemukan');
+        if (o.status === 'batal') throw new Error('Nota yang sudah dibatalkan tidak bisa diubah');
+        if (!p.items.length) throw new Error('Keranjang masih kosong');
+        const oldPrice = new Map(o.order_items.map(i => [i.product_id, i.price]));
+        const items = p.items.map(it => {
+          const prod = db.products.find(x => x.id === it.product_id);
+          if (!prod) throw new Error('Produk tidak ditemukan');
+          const price = oldPrice.get(prod.id) ?? prod.price;
+          return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price, subtotal: price * it.qty };
+        });
+        const total = items.reduce((s, i) => s + i.subtotal, 0);
+        const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
+        if (paid < total) throw new Error('Uang yang dibayar kurang dari total');
+        o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
+        items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
+        const ful = p.fulfillment || 'langsung';
+        Object.assign(o, {
+          customer_name: p.customer_name || '', customer_wa: p.customer_wa || '',
+          fulfillment: ful, fulfill_date: p.fulfill_date || null, fulfill_time: p.fulfill_time || null,
+          ongkir: ful === 'kirim' ? Number(p.ongkir) || 0 : 0,
+          total, pay_method: p.pay_method, paid, change: paid - total, note: p.note || '',
+          status: ful === 'langsung' ? 'selesai' : o.fulfillment === 'langsung' ? 'menunggu' : o.status,
+          edited_at: new Date().toISOString(), order_items: items,
+        });
+        save(); return clone(o);
       },
       async listOrders(fromIso, toIso) {
         return clone(load().orders.filter(o => o.created_at >= fromIso && o.created_at < toIso).reverse());
@@ -176,12 +237,12 @@
           .sort((a, b) => (a.fulfill_date || '9').localeCompare(b.fulfill_date || '9') || (a.fulfill_time || '').localeCompare(b.fulfill_time || ''));
       },
       async recentOrders(limit = 30) { return clone(load().orders.slice(-limit).reverse()); },
-      async setStatus(id, status) { load().orders.find(o => o.id === id).status = status; save(); },
+      async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id) {
         const db = load(); const o = db.orders.find(x => x.id === id);
         if (o && o.status !== 'batal') {
           o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
-          o.status = 'batal'; save();
+          o.status = 'batal'; o.cancelled_at = new Date().toISOString(); save();
         }
       },
       async deleteOrder(id) {
@@ -189,14 +250,22 @@
         const db = load(); db.orders = db.orders.filter(o => o.id !== id); save();
       },
       async stockCard(productId, fromIso) {
-        const db = load();
-        return [
-          ...(db.moves || []).filter(m => m.product_id === productId && m.created_at >= fromIso)
-            .map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by })),
-          ...db.orders.filter(o => o.status !== 'batal' && o.created_at >= fromIso).flatMap(o =>
-            o.order_items.filter(i => i.product_id === productId)
-              .map(i => ({ at: o.created_at, delta: -i.qty, order: o, by: 'contoh@lunpia.local' }))),
-        ];
+        const db = load(), from = new Date(fromIso);
+        const rows = db.orders
+          .filter(o => new Date(o.created_at) >= from || (o.cancelled_at && new Date(o.cancelled_at) >= from))
+          .flatMap(o => o.order_items.filter(i => i.product_id === productId).map(i => ({ ...o, qty: i.qty })));
+        return cardEvents((db.moves || []).filter(m => m.product_id === productId && new Date(m.created_at) >= from), rows, fromIso);
+      },
+
+      async getCashDay(day) { return clone((load().cash || {})[day] || null); },
+      async openCash(day, opening) {
+        const db = load(); db.cash ||= {};
+        db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening };
+        save();
+      },
+      async closeCash(day, f) {
+        const db = load(); if (!db.cash?.[day]) throw new Error('Isi uang awal dulu');
+        Object.assign(db.cash[day], f, { closed_at: new Date().toISOString(), closed_by: 'contoh@lunpia.local' }); save();
       },
       resetDemo() { mem = seed(); save(); },
     };

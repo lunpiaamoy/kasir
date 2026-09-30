@@ -1,0 +1,14 @@
+{
+  "name": "Kasir Lunpia Amoy",
+  "short_name": "Kasir Amoy",
+  "description": "Kasir dan stok Lunpia Amoy",
+  "lang": "id",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf7f7",
+  "theme_color": "#8c1c22",
+  "icons": [
+    { "src": "logo.jpg", "sizes": "256x256", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
