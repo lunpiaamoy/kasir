@@ -1,6 +1,7 @@
 -- =====================================================================
 -- Kasir Lunpia Amoy: struktur database
 -- Jalankan SEKALI di Supabase: menu SQL Editor → New query → tempel → Run.
+-- Setelah itu jalankan juga 002_pembaruan.sql (peran pemilik/kasir, kas harian, dll).
 -- =====================================================================
 
 -- ---------- Daftar staf yang boleh memakai kasir ----------

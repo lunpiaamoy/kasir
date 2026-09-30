@@ -114,9 +114,33 @@ input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
   width: min(380px, 100%); background: var(--surface); padding: 28px;
   border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(109, 20, 25, .08);
 }
-.login-card img { width: 120px; display: block; margin: 0 auto 8px; }
-.login-card h1 { font-family: var(--f-display); font-weight: 400; font-size: 26px; text-align: center; color: var(--amoy); margin-bottom: 8px; }
+.login-card img { width: 120px; display: block; margin: 0 auto 16px; }
 .login-card .primary { width: 100%; margin-top: 18px; }
+
+/* Tombol khusus pemilik: disembunyikan untuk kasir (database juga menolaknya) */
+body:not(.is-owner) .owner-only { display: none !important; }
+
+/* ---------- Pengingat & kas ---------- */
+.notices { display: flex; flex-direction: column; gap: 8px; }
+.notices:not(:empty) { margin-bottom: 14px; }
+.notice { background: var(--amoy-tint); color: var(--ink); border-radius: var(--r); padding: 10px 14px; font-size: 14px; }
+.notice.warn { background: var(--warn-tint); color: var(--warn); }
+.notice.bad { background: var(--bad-tint); color: var(--bad); }
+.cash .view-head { margin-top: 0; }
+.cash .metrics { margin-bottom: 12px; }
+.cash-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.cash-row > div { flex: 1 1 180px; }
+.cash-row .grow { flex: 2 1 220px; }
+.cash-diff { margin: 8px 0 0; }
+.cash-history { padding: 12px 16px; }
+.cash-history summary { cursor: pointer; font-weight: 700; }
+.cash-history[open] summary { margin-bottom: 10px; }
+.head-actions { margin-top: 0; }
+.count-in { width: 90px; padding: 6px 8px; }
+.opname-sum { margin: 10px 0 0; font-weight: 600; }
+#opnameForm .hint { margin: 4px 0 10px; }
+.edit-banner { background: var(--warn-tint); color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 6px; }
+.order-note { font-size: 14px; font-style: italic; }
 
 /* ---------- Umum ---------- */
 main { padding: 16px; max-width: 1280px; margin: 0 auto; }
@@ -248,14 +272,37 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 
 /* ---------- Laporan ---------- */
 .range { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
-.range-custom { display: flex; align-items: center; gap: 6px; }
-.range-custom input { width: auto; padding: 6px 8px; }
+.range-custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+.range-custom input { width: auto; padding: 6px 8px; flex: 1 1 130px; min-width: 0; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
 .metric small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .metric b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; margin-top: 4px; }
 .metric.lead b { color: var(--amoy); }
 .metric span { font-size: 13px; color: var(--muted); }
+.range .seg.compact { max-width: 100%; overflow-x: auto; }
+.seg.compact button { white-space: nowrap; }
+
+/* Grafik penjualan: satu seri, batang marun, grid tipis */
+.chart-panel { margin: 0 0 20px; }
+.chart-panel figcaption { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.chart { position: relative; height: 260px; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; shape-rendering: crispEdges; }
+.chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .bar { fill: var(--amoy); pointer-events: none; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover + .bar, .chart .bar.on { fill: var(--amoy-deep); }
+.chart .hl { fill: var(--amoy-tint); }
+.chart-tip {
+  position: absolute; pointer-events: none; z-index: 2; transform: translate(-50%, calc(-100% - 10px));
+  background: var(--ink); color: #fff; border-radius: 8px; padding: 7px 10px; font-size: 13px; line-height: 1.35;
+  white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+}
+.chart-tip b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+.chart-tip span { color: rgba(255, 255, 255, .75); }
+.chart .empty-chart { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .report-grid h3 { margin-bottom: 8px; }
 @media (max-width: 800px) { .report-grid { grid-template-columns: 1fr; } }
@@ -270,6 +317,12 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
   max-height: calc(100vh - 32px); overflow: auto;
 }
 .sheet h2 { margin-bottom: 12px; }
+.sheet.wide { width: min(820px, 100%); }
+.sheet.wide .metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+#cardTable td:first-child { white-space: nowrap; }
+.sheet .view-head h2 { margin-bottom: 0; }
+.in { color: var(--ok); font-weight: 700; }
+.out { color: var(--bad); font-weight: 700; }
 .paper { background: #f1eeee; padding: 16px; border-radius: 10px; display: flex; justify-content: center; }
 .hint { font-size: 13px; margin: 10px 0 0; }
 
@@ -280,8 +333,10 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
   box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
 }
 .paper .receipt { padding: 3mm 2mm; width: calc(48mm + 4mm); }
-.receipt img { display: block; width: 26mm; margin: 0 auto 1mm; filter: grayscale(1) contrast(1.3); }
+/* logo.jpg punya ruang kosong di bawah gambarnya: tampilkan bagian atas saja supaya alamat dekat ke logo */
+.receipt img { display: block; width: 26mm; aspect-ratio: 100 / 78; object-fit: cover; object-position: top; margin: 0 auto 1mm; filter: grayscale(1) contrast(1.3); }
 .receipt .r-c { text-align: center; }
+.receipt .r-store { font-family: "Times New Roman", Times, serif; font-weight: 700; font-size: 9pt; margin-bottom: 2mm; }
 .receipt table { width: 100%; border-collapse: collapse; }
 .receipt td, .receipt th { padding: 0; vertical-align: top; font-weight: 400; }
 .receipt .r-gap { height: 3mm; }
