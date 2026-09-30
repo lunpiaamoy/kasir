@@ -567,6 +567,8 @@
     if (key === 'yesterday') return [new Date(+start - day), start];
     if (key === '7d') return [new Date(+start - 6 * day), new Date(+start + day)];
     if (key === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(+start + day)];
+    if (key === 'year') return [new Date(now.getFullYear(), 0, 1), new Date(+start + day)];
+    if (key === 'lastyear') return [new Date(now.getFullYear() - 1, 0, 1), new Date(now.getFullYear(), 0, 1)];
   }
   $('rangeSeg').addEventListener('click', e => {
     const b = e.target.closest('[data-range]'); if (!b) return;
@@ -611,16 +613,109 @@
       <tbody>${topRows.length ? topRows.map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.qty}</td><td class="num">${rp(r.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">Belum ada penjualan di periode ini.</td></tr>'}</tbody>`;
 
-    const daily = new Map();
-    valid.forEach(o => {
-      const k = ymdLocal(new Date(o.created_at));
-      const r = daily.get(k) || { n: 0, amount: 0 }; r.n++; r.amount += o.total; daily.set(k, r);
-    });
-    const dayRows = [...daily].sort((a, b) => b[0].localeCompare(a[0]));
-    $('dailyTable').innerHTML = `<thead><tr><th>Tanggal</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
-      <tbody>${dayRows.length ? dayRows.map(([k, r]) => `<tr><td>${esc(parseYmd(k).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td><td class="num">${r.n}</td><td class="num">${rp(r.amount)}</td></tr>`).join('')
+    // Periode ≤ 1 hari: per jam; ≤ 62 hari: per hari; lebih panjang: per bulan
+    const days = Math.round((to - from) / 864e5);
+    const unit = days <= 1 ? 'hour' : days <= 62 ? 'day' : 'month';
+    const buckets = periodBuckets(from, to, unit);
+    const byKey = new Map(buckets.map(b => [b.key, b]));
+    valid.forEach(o => { const b = byKey.get(bucketKey(new Date(o.created_at), unit)); if (b) { b.n++; b.amount += o.total; } });
+
+    $('chartTitle').textContent = { hour: 'Penjualan per jam', day: 'Penjualan per hari', month: 'Penjualan per bulan' }[unit];
+    $('chartSub').textContent = `${dmy(from)} – ${dmy(new Date(+to - 864e5))}`;
+    lastChart = buckets; drawSalesChart();
+
+    const listUnit = unit === 'month' ? 'month' : 'day';
+    const rows = (unit === listUnit ? buckets : periodBuckets(from, to, 'day').map(b => {
+      valid.forEach(o => { if (bucketKey(new Date(o.created_at), 'day') === b.key) { b.n++; b.amount += o.total; } });
+      return b;
+    })).filter(b => b.n).reverse();
+    $('periodTitle').textContent = listUnit === 'month' ? 'Per bulan' : 'Per hari';
+    $('dailyTable').innerHTML = `<thead><tr><th>${listUnit === 'month' ? 'Bulan' : 'Tanggal'}</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
+      <tbody>${rows.length ? rows.map(b => `<tr><td>${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
   }
+
+  // ---------------------------------------------------------------- Chart
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  function bucketKey(d, unit) {
+    if (unit === 'hour') return String(d.getHours());
+    if (unit === 'day') return ymdLocal(d);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+  function periodBuckets(from, to, unit) {
+    const out = [];
+    if (unit === 'hour') {
+      for (let h = 0; h < 24; h++) out.push({ key: String(h), tick: pad(h), long: `Pukul ${pad(h)}.00–${pad(h)}.59`, n: 0, amount: 0 });
+      return out;
+    }
+    const d = unit === 'day' ? new Date(from) : new Date(from.getFullYear(), from.getMonth(), 1);
+    while (d < to) {
+      out.push(unit === 'day'
+        ? { key: ymdLocal(d), tick: String(d.getDate()), long: d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), n: 0, amount: 0 }
+        : { key: bucketKey(d, 'month'), tick: MONTHS[d.getMonth()], long: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, n: 0, amount: 0 });
+      unit === 'day' ? d.setDate(d.getDate() + 1) : d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }
+  const shortRp = v => v >= 1e6 ? `${(v / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`
+    : v >= 1e3 ? `${(v / 1e3).toLocaleString('id-ID', { maximumFractionDigits: 0 })} rb` : String(v);
+  function niceMax(v) {
+    if (v <= 0) return 100000;
+    const p = 10 ** Math.floor(Math.log10(v));
+    return [1, 2, 2.5, 5, 10].map(m => m * p).find(m => m >= v);
+  }
+
+  let lastChart = [];
+  function drawSalesChart() {
+    const el = $('salesChart'), buckets = lastChart;
+    const W = el.clientWidth, H = el.clientHeight;
+    if (!W) return;
+    const m = { l: 52, r: 4, t: 22, b: 24 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const top = niceMax(Math.max(...buckets.map(b => b.amount)));
+    const y = v => m.t + ph - (v / top) * ph;
+    const band = pw / buckets.length;
+    const bw = Math.max(2, Math.min(24, band - 2));
+    const every = Math.ceil(34 / band);
+    const peak = buckets.reduce((a, b) => (b.amount > a.amount ? b : a), buckets[0]);
+
+    const ticks = [0, .25, .5, .75, 1].map(f => f * top);
+    const bars = buckets.map((b, i) => {
+      const cx = m.l + band * (i + .5), x = cx - bw / 2, yt = y(b.amount), h = m.t + ph - yt;
+      const r = Math.min(4, h, bw / 2);
+      const bar = h > 0 ? `<path class="bar" data-i="${i}" d="M${x},${m.t + ph}V${yt + r}a${r},${r} 0 0 1 ${r},${-r}H${x + bw - r}a${r},${r} 0 0 1 ${r},${r}V${m.t + ph}Z"/>` : '';
+      return `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ph}"/>${bar}`;
+    }).join('');
+    const xLabels = buckets.map((b, i) => (i % every ? '' :
+      `<text class="axis" x="${m.l + band * (i + .5)}" y="${H - 6}" text-anchor="middle">${esc(b.tick)}</text>`)).join('');
+    const peakX = m.l + band * (buckets.indexOf(peak) + .5);
+    const peakLabel = peak.amount ? `<text class="axis" x="${Math.min(Math.max(peakX, m.l + 24), W - 24)}" y="${y(peak.amount) - 6}" text-anchor="middle" font-weight="700">${shortRp(peak.amount)}</text>` : '';
+
+    el.innerHTML = `<svg role="img" aria-label="${esc($('chartTitle').textContent)}">
+      ${ticks.map(t => `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>
+        <text class="axis" x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${t ? shortRp(t) : '0'}</text>`).join('')}
+      ${bars}${xLabels}${peakLabel}
+    </svg>${buckets.some(b => b.amount) ? '' : '<div class="empty-chart">Belum ada penjualan di periode ini.</div>'}
+    <div class="chart-tip" hidden></div>`;
+
+    const svg = el.querySelector('svg'), tip = el.querySelector('.chart-tip');
+    const show = i => {
+      const b = buckets[i];
+      el.querySelectorAll('.bar.on').forEach(n => n.classList.remove('on'));
+      el.querySelector(`.bar[data-i="${i}"]`)?.classList.add('on');
+      tip.innerHTML = `<span>${esc(b.long)}</span><b>Rp ${rp(b.amount)}</b><span>${b.n} transaksi</span>`;
+      tip.style.left = Math.min(Math.max(m.l + band * (i + .5), 70), W - 70) + 'px';
+      tip.style.top = Math.min(y(b.amount), m.t + ph - 4) + 'px';
+      tip.hidden = false;
+    };
+    svg.addEventListener('pointerover', e => { const i = e.target.dataset?.i; if (i != null) show(Number(i)); });
+    svg.addEventListener('pointerleave', () => { tip.hidden = true; el.querySelectorAll('.bar.on').forEach(n => n.classList.remove('on')); });
+  }
+  let resizeRaf;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => { if (currentTab === 'laporan' && lastChart.length) drawSalesChart(); });
+  });
 
   boot();
 })();

@@ -12,6 +12,15 @@
   // ------------------------------------------------------------------ Supabase
   function supabaseDb() {
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+    // Supabase membatasi 1000 baris per permintaan; ambil per halaman sampai habis.
+    const all = async build => {
+      const rows = [];
+      for (let i = 0; ; i += 1000) {
+        const { data, error } = await build().range(i, i + 999);
+        fail(error); rows.push(...data);
+        if (data.length < 1000) return rows;
+      }
+    };
     return {
       demo: false,
       async session() { const { data } = await sb.auth.getSession(); return data.session; },
@@ -45,9 +54,9 @@
         const { data, error } = await sb.rpc('create_order', { p: payload }); fail(error); return data;
       },
       async listOrders(fromIso, toIso) {
-        const { data, error } = await sb.from('orders').select('*, order_items(*)')
-          .gte('created_at', fromIso).lt('created_at', toIso).order('created_at', { ascending: false });
-        fail(error); return data;
+        return all(() => sb.from('orders').select('*, order_items(*)')
+          .gte('created_at', fromIso).lt('created_at', toIso)
+          .order('created_at', { ascending: false }).order('id', { ascending: false }));
       },
       async listPending() {
         const { data, error } = await sb.from('orders').select('*, order_items(*)').eq('status', 'menunggu')
@@ -65,14 +74,6 @@
       // Kartu stok: semua perubahan stok satu produk sejak fromIso sampai sekarang.
       // Transaksi batal tidak ikut karena stoknya sudah dikembalikan.
       async stockCard(productId, fromIso) {
-        const all = async build => {
-          const rows = [];
-          for (let i = 0; ; i += 1000) {
-            const { data, error } = await build().range(i, i + 999);
-            fail(error); rows.push(...data);
-            if (data.length < 1000) return rows;
-          }
-        };
         const [moves, sold] = await Promise.all([
           all(() => sb.from('stock_moves').select('id, delta, note, created_by, created_at')
             .eq('product_id', productId).gte('created_at', fromIso).order('id')),

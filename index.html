@@ -156,6 +156,8 @@
         <button type="button" data-range="yesterday" aria-checked="false">Kemarin</button>
         <button type="button" data-range="7d" aria-checked="false">7 hari</button>
         <button type="button" data-range="month" aria-checked="false">Bulan ini</button>
+        <button type="button" data-range="year" aria-checked="false">Tahun ini</button>
+        <button type="button" data-range="lastyear" aria-checked="false">Tahun lalu</button>
       </div>
       <div class="range-custom">
         <input type="date" id="rFrom" aria-label="Dari tanggal">
@@ -165,13 +167,17 @@
       </div>
     </div>
     <div class="metrics" id="metrics"></div>
+    <figure class="panel chart-panel">
+      <figcaption><h3 id="chartTitle">Penjualan</h3><span class="muted" id="chartSub"></span></figcaption>
+      <div class="chart" id="salesChart"></div>
+    </figure>
     <div class="report-grid">
       <div>
         <h3>Produk terlaris</h3>
         <div class="table-wrap"><table class="table" id="topTable"></table></div>
       </div>
       <div>
-        <h3>Per hari</h3>
+        <h3 id="periodTitle">Per hari</h3>
         <div class="table-wrap"><table class="table" id="dailyTable"></table></div>
       </div>
     </div>
