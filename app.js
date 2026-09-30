@@ -503,12 +503,13 @@
 
     const statusChip = s => s === 'batal' ? '<span class="chip bad">Batal</span>' : s === 'menunggu' ? '<span class="chip warn">Menunggu</span>' : '<span class="chip ok">Selesai</span>';
     $('recentTable').innerHTML = `
-      <thead><tr><th>Nota</th><th>Waktu</th><th>Pembeli</th><th>Jenis</th><th>Bayar</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nota</th><th>Tanggal</th><th>Waktu</th><th>Pembeli</th><th>Jenis</th><th>Bayar</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
       <tbody>${recent.length ? recent.map(o => {
         const d = new Date(o.created_at);
         return `<tr class="${o.status === 'batal' ? 'dim' : ''}">
           <td class="num">${notaNo(o)}</td>
-          <td data-sort="${esc(o.created_at)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
+          <td data-sort="${esc(o.created_at)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
+          <td data-sort="${pad(d.getHours())}${pad(d.getMinutes())}">${pad(d.getHours())}.${pad(d.getMinutes())}</td>
           <td>${esc(o.customer_name || '-')}</td>
           <td>${FUL_LABEL[o.fulfillment]}</td>
           <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
@@ -520,7 +521,7 @@
             <button class="ghost small danger owner-only" data-del="${o.id}">Hapus</button>
           </div></td>
         </tr>`;
-      }).join('') : '<tr><td class="empty" colspan="8">Belum ada transaksi.</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td class="empty" colspan="9">Belum ada transaksi.</td></tr>'}</tbody>`;
   }
 
   $('view-pesanan').addEventListener('click', async e => {
