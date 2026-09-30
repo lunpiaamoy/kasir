@@ -5,8 +5,13 @@
   const cfg = window.APP_CONFIG;
   const isDemo = !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY;
 
+  // Fungsi/tabel/kolom belum ada di database → 002_pembaruan.sql belum dijalankan
+  const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
   function fail(error) {
-    if (error) throw new Error(error.message || String(error));
+    if (!error) return;
+    if (NOT_UPDATED.includes(error.code))
+      throw new Error('Database belum diperbarui. Jalankan file supabase/002_pembaruan.sql di Supabase (SQL Editor → Run).');
+    throw new Error(error.message || String(error));
   }
 
   // Kartu stok: gabungan riwayat stok manual dan transaksi sejak `fromIso`.
@@ -49,8 +54,18 @@
         throw new Error('Gagal masuk: ' + error.message);
       },
       async signOut() { await sb.auth.signOut(); },
-      // 'pemilik', 'kasir', atau null kalau email belum terdaftar sebagai staf
-      async myRole() { const { data, error } = await sb.rpc('my_role'); fail(error); return data || null; },
+      // 'pemilik', 'kasir', atau null kalau email belum terdaftar sebagai staf.
+      // Kalau 002_pembaruan.sql belum dijalankan, my_role belum ada: pakai is_staff (semua staf
+      // dianggap pemilik, seperti sebelumnya) dan tandai needsUpdate supaya aplikasi memberi tahu.
+      needsUpdate: false,
+      async myRole() {
+        const { data, error } = await sb.rpc('my_role');
+        if (!error) return data || null;
+        if (error.code !== 'PGRST202') fail(error);
+        this.needsUpdate = true;
+        const r = await sb.rpc('is_staff'); fail(r.error);
+        return r.data === true ? 'pemilik' : null;
+      },
 
       async listProducts() {
         const { data, error } = await sb.from('products').select('*').order('sort').order('id');
@@ -88,7 +103,13 @@
       async updateOrder(id, payload) {
         const { data, error } = await sb.rpc('update_order', { p_id: id, p: payload }); fail(error); return data;
       },
-      async markDone(id) { const { error } = await sb.rpc('mark_done', { p_id: id }); fail(error); },
+      async markDone(id) {
+        const { error } = await sb.rpc('mark_done', { p_id: id });
+        if (error?.code === 'PGRST202') {   // database belum diperbarui: cara lama
+          const r = await sb.from('orders').update({ status: 'selesai' }).eq('id', id); fail(r.error); return;
+        }
+        fail(error);
+      },
       async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
       // Stok dikembalikan dan nota dihapus dalam satu transaksi database (khusus pemilik)
       async deleteOrder(id) { const { error } = await sb.rpc('delete_order', { p_id: id }); fail(error); },

@@ -792,7 +792,7 @@
   async function renderCash() {
     renderCashHistory();
     let c;
-    try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = ''; toast(e.message, true); return; }
+    try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = `<p class="error">${esc(e.message)}</p>`; return; }
     const { cd, cash, n } = c;
     const head = `<div class="view-head"><h2 id="cashTitle">Kas hari ini</h2><span class="muted">${esc(longDate(new Date()))}</span></div>`;
     if (!cd) {
@@ -833,7 +833,7 @@
   async function renderCashHistory() {
     const from = new Date(); from.setDate(from.getDate() - 13);
     let days;
-    try { days = await DB.listCashDays(ymdLocal(from)); } catch (e) { toast(e.message, true); return; }
+    try { days = await DB.listCashDays(ymdLocal(from)); } catch { $('cashHistory').innerHTML = ''; return; }
     const who = e => esc((e || '').split('@')[0]);
     $('cashHistory').innerHTML = `
       <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th></tr></thead>
@@ -873,15 +873,16 @@
   // Pengingat di halaman Kasir: uang awal belum diisi, pesanan hari ini & besok
   async function refreshNotices() {
     if (!role) return;
-    let pending, cd;
-    try { [pending, cd] = await Promise.all([DB.listPending(), DB.getCashDay(ymdLocal(new Date()))]); }
-    catch { return; }
+    let pending, cd = undefined;
+    try { pending = await DB.listPending(); } catch { return; }
+    try { cd = await DB.getCashDay(ymdLocal(new Date())); } catch {}   // undefined = tabel kas belum ada
     const today = ymdLocal(new Date()), tomorrow = ymdLocal(new Date(Date.now() + 864e5));
     const late = pending.filter(o => o.fulfill_date && o.fulfill_date < today).length;
     const nToday = pending.filter(o => o.fulfill_date === today).length;
     const nTomorrow = pending.filter(o => o.fulfill_date === tomorrow).length;
     const items = [];
-    if (!cd) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="laporan">Isi sekarang</button></div>`);
+    if (DB.needsUpdate) items.push(`<div class="notice bad"><b>Database belum diperbarui.</b> Aplikasi berjalan dengan cara lama: semua staf dianggap pemilik, dan kas harian, stok opname, serta ubah/hapus nota belum bisa dipakai. Jalankan file <b>supabase/002_pembaruan.sql</b> di Supabase (SQL Editor → Run), lalu muat ulang halaman ini.</div>`);
+    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="laporan">Isi sekarang</button></div>`);
     if (late) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     if (nToday || nTomorrow) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     $('kasirNotices').innerHTML = items.join('');
