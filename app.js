@@ -458,11 +458,13 @@
     ].join('\n');
   }
 
-  // Nomor WA di kartu pesanan: HP → buka chat di aplikasi; laptop → salin nomor (untuk dicari di WhatsApp Web)
-  async function waContact(phone) {
-    if (isMobile) return void (location.href = `https://wa.me/${waNumber(phone)}`);
-    try { await navigator.clipboard.writeText(phone); toast(`Nomor ${phone} disalin. Tempel di kolom cari WhatsApp Web.`); }
-    catch { toast(`Nomor WA: ${phone}`); }
+  // Tombol WhatsApp (kontak & kartu pesanan): buka chat pembeli dengan salam pembuka sudah terketik.
+  // Laptop: WhatsApp Web di tab baru; HP: aplikasi WhatsApp.
+  const waGreeting = name => `Halo${name ? ' Kak ' + name : ' Kak'}, salam dari ${STORE.name}. Ada yang bisa kami bantu?`;
+  function waContact(phone, name = '') {
+    const num = waNumber(phone), text = encodeURIComponent(waGreeting(name.trim()));
+    if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
+    window.open(`https://web.whatsapp.com/send?phone=${num}&text=${text}`, '_blank');
   }
 
   let receiptOrder = null;
@@ -525,7 +527,7 @@
                 <span class="order-time">${hhmm(o.fulfill_time) || '--.--'}</span>
                 <span class="chip ${o.fulfillment === 'kirim' ? 'warn' : 'plain'}">${FUL_LABEL[o.fulfillment]}</span>
               </div>
-              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· <button class="link wa-link" data-wachat="${esc(o.customer_wa)}">${esc(o.customer_wa)}</button>` : ''}</div>
+              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· <button class="link wa-link" data-wachat="${esc(o.customer_wa)}" data-waname="${esc(o.customer_name)}" title="Buka WhatsApp">${esc(o.customer_wa)}</button>` : ''}</div>
               <div class="order-items">${esc(itemsSummary(o))}</div>
               ${o.note ? `<div class="order-note">Catatan: ${esc(o.note)}</div>` : ''}
               <div class="order-total"><span>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'} · Nota ${notaNo(o)}</span><span>${rp(o.total)}</span></div>
@@ -571,7 +573,7 @@
     const d = t.dataset;
     try {
       if (d.reprint) showReceipt(orderCache.get(Number(d.reprint)));
-      else if (d.wachat) waContact(d.wachat);
+      else if (d.wachat) waContact(d.wachat, d.waname);
       else if (d.done) { await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders(); }
       else if (d.editorder) startEdit(orderCache.get(Number(d.editorder)));
       else if (d.cancel) {
@@ -627,7 +629,7 @@
           <td data-sort="${esc(c.last)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
           <td><div class="add-stock">
             <button class="primary small" data-neworder="${i}">Pesan baru</button>
-            ${c.wa ? `<button class="ghost small" data-wachat="${esc(c.wa)}">${isMobile ? 'Chat WA' : 'Salin nomor'}</button>` : ''}
+            ${c.wa ? `<button class="ghost small" data-wachat="${esc(c.wa)}" data-waname="${esc(c.name)}">WhatsApp</button>` : ''}
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -642,7 +644,7 @@
   $('contactSearch').addEventListener('input', filterContacts);
   $('contactTable').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.wachat) return waContact(b.dataset.wachat);
+    if (b.dataset.wachat) return waContact(b.dataset.wachat, b.dataset.waname);
     if (b.dataset.neworder) {
       const c = contacts[Number(b.dataset.neworder)];
       resetCart();
