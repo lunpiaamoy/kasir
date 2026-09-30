@@ -75,7 +75,7 @@
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
-  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'cashHistory'].forEach(makeSortable);
+  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -460,7 +460,7 @@
 
   // Tombol WhatsApp (kontak & kartu pesanan): buka chat pembeli dengan salam pembuka sudah terketik.
   // Laptop: WhatsApp Web di tab baru; HP: aplikasi WhatsApp.
-  const waGreeting = name => `Halo${name ? ' Kak ' + name : ' Kak'}, salam dari ${STORE.name}. Ada yang bisa kami bantu?`;
+  const waGreeting = name => `Hai Kak${name ? ' ' + name : ''}.`;
   function waContact(phone, name = '') {
     const num = waNumber(phone), text = encodeURIComponent(waGreeting(name.trim()));
     if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
@@ -921,7 +921,8 @@
 
     $('chartTitle').textContent = { hour: 'Penjualan per jam', day: 'Penjualan per hari', month: 'Penjualan per bulan' }[unit];
     $('chartSub').textContent = `${dmy(from)} – ${dmy(new Date(+to - 864e5))}`;
-    lastChart = buckets; drawSalesChart();
+    charts.salesChart = { buckets, label: $('chartTitle').textContent, value: 'amount' }; drawBarChart('salesChart');
+    renderHours(valid, from, to, unit === 'hour');
 
     const listUnit = unit === 'month' ? 'month' : 'day';
     const rows = (unit === listUnit ? buckets : periodBuckets(from, to, 'day').map(b => {
@@ -1110,6 +1111,44 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 
+  // ---------------------------------------------------------------- Jam ramai
+  // Transaksi dijumlahkan per jam (00–23) untuk seluruh hari di periode. Grafik dan tabel hanya
+  // mencakup rentang jam yang ada penjualannya. Ramai = 3 jam dengan transaksi terbanyak, Sepi = 3 tersedikit.
+  function renderHours(valid, from, to, singleDay) {
+    $('hourPanel').hidden = singleDay;   // periode 1 hari: grafik utama sudah per jam
+    if (singleDay) { delete charts.hourChart; return; }
+    const hours = Array.from({ length: 24 }, (_, h) => ({ h, n: 0, amount: 0 }));
+    valid.forEach(o => { const x = hours[new Date(o.created_at).getHours()]; x.n++; x.amount += o.total; });
+    const used = hours.filter(x => x.n);
+    const days = Math.max(1, Math.round((to - from) / 864e5));
+    if (!used.length) {
+      $('hourSum').textContent = ''; $('hourTable').innerHTML = '';
+      charts.hourChart = { buckets: hours.map(x => ({ tick: pad(x.h), long: '', n: 0, amount: 0 })), label: 'Transaksi per jam', value: 'n' };
+      return drawBarChart('hourChart');
+    }
+    const span = hours.slice(used[0].h, used[used.length - 1].h + 1);
+    const rank = [...span].sort((a, b) => b.n - a.n || b.amount - a.amount);
+    const busy = new Set(rank.slice(0, Math.min(3, span.length)).map(x => x.h));
+    const quiet = new Set(span.length > 3 ? rank.slice(-Math.min(3, span.length - 3)).map(x => x.h) : []);
+    const label = h => `${pad(h)}.00–${pad(h)}.59`;
+    const list = hs => [...hs].sort((a, b) => a - b).map(h => `${pad(h)}.00`).join(', ');
+    $('hourSum').innerHTML = `Paling ramai: <b>${list(busy)}</b>${quiet.size ? ` · Paling sepi: <b>${list(quiet)}</b>` : ''}`;
+    charts.hourChart = {
+      buckets: span.map(x => ({ tick: pad(x.h), long: `Pukul ${label(x.h)}`, n: x.n, amount: x.amount })),
+      label: 'Transaksi per jam', value: 'n',
+    };
+    drawBarChart('hourChart');
+    $('hourTable').innerHTML = `
+      <thead><tr><th>Jam</th><th class="num">Transaksi</th><th class="num">Penjualan</th><th class="num">Rata-rata trx/hari</th><th>Keterangan</th></tr></thead>
+      <tbody>${span.map(x => `<tr>
+        <td data-sort="${pad(x.h)}">${label(x.h)}</td>
+        <td class="num">${x.n}</td>
+        <td class="num">${rp(x.amount)}</td>
+        <td class="num" data-sort="${x.n / days}">${(x.n / days).toLocaleString('id-ID', { maximumFractionDigits: 1 })}</td>
+        <td data-sort="${busy.has(x.h) ? 2 : quiet.has(x.h) ? 0 : 1}">${busy.has(x.h) ? '<span class="chip amoy">Ramai</span>' : quiet.has(x.h) ? '<span class="chip plain">Sepi</span>' : ''}</td>
+      </tr>`).join('')}</tbody>`;
+  }
+
   // ---------------------------------------------------------------- Chart
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   function bucketKey(d, unit) {
@@ -1140,23 +1179,26 @@
     return [1, 2, 2.5, 5, 10].map(m => m * p).find(m => m >= v);
   }
 
-  let lastChart = [];
-  function drawSalesChart() {
-    const el = $('salesChart'), buckets = lastChart;
+  // Grafik batang umum. value 'amount' (Rupiah) atau 'n' (jumlah transaksi).
+  const charts = {};   // id elemen → { buckets, label, value }
+  function drawBarChart(id) {
+    const el = $(id), { buckets, label, value = 'amount' } = charts[id] || {};
     const W = el.clientWidth, H = el.clientHeight;
-    if (!W) return;
+    if (!W || !buckets?.length) return;
+    const val = b => b[value];
+    const fmt = v => value === 'amount' ? shortRp(v) : v.toLocaleString('id-ID', { maximumFractionDigits: 1 });
     const m = { l: 52, r: 4, t: 22, b: 24 };
     const pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const top = niceMax(Math.max(...buckets.map(b => b.amount)));
+    const top = value === 'amount' ? niceMax(Math.max(...buckets.map(val))) : Math.max(4, niceMax(Math.max(...buckets.map(val))));
     const y = v => m.t + ph - (v / top) * ph;
     const band = pw / buckets.length;
     const bw = Math.max(2, Math.min(24, band - 2));
     const every = Math.ceil(34 / band);
-    const peak = buckets.reduce((a, b) => (b.amount > a.amount ? b : a), buckets[0]);
+    const peak = buckets.reduce((a, b) => (val(b) > val(a) ? b : a), buckets[0]);
 
     const ticks = [0, .25, .5, .75, 1].map(f => f * top);
     const bars = buckets.map((b, i) => {
-      const cx = m.l + band * (i + .5), x = cx - bw / 2, yt = y(b.amount), h = m.t + ph - yt;
+      const cx = m.l + band * (i + .5), x = cx - bw / 2, yt = y(val(b)), h = m.t + ph - yt;
       const r = Math.min(4, h, bw / 2);
       const bar = h > 0 ? `<path class="bar" data-i="${i}" d="M${x},${m.t + ph}V${yt + r}a${r},${r} 0 0 1 ${r},${-r}H${x + bw - r}a${r},${r} 0 0 1 ${r},${r}V${m.t + ph}Z"/>` : '';
       return `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ph}"/>${bar}`;
@@ -1164,13 +1206,13 @@
     const xLabels = buckets.map((b, i) => (i % every ? '' :
       `<text class="axis" x="${m.l + band * (i + .5)}" y="${H - 6}" text-anchor="middle">${esc(b.tick)}</text>`)).join('');
     const peakX = m.l + band * (buckets.indexOf(peak) + .5);
-    const peakLabel = peak.amount ? `<text class="axis" x="${Math.min(Math.max(peakX, m.l + 24), W - 24)}" y="${y(peak.amount) - 6}" text-anchor="middle" font-weight="700">${shortRp(peak.amount)}</text>` : '';
+    const peakLabel = val(peak) ? `<text class="axis" x="${Math.min(Math.max(peakX, m.l + 24), W - 24)}" y="${y(val(peak)) - 6}" text-anchor="middle" font-weight="700">${fmt(val(peak))}${value === 'n' ? ' trx' : ''}</text>` : '';
 
-    el.innerHTML = `<svg role="img" aria-label="${esc($('chartTitle').textContent)}">
+    el.innerHTML = `<svg role="img" aria-label="${esc(label)}">
       ${ticks.map(t => `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>
-        <text class="axis" x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${t ? shortRp(t) : '0'}</text>`).join('')}
+        <text class="axis" x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${t ? fmt(t) : '0'}</text>`).join('')}
       ${bars}${xLabels}${peakLabel}
-    </svg>${buckets.some(b => b.amount) ? '' : '<div class="empty-chart">Belum ada penjualan di periode ini.</div>'}
+    </svg>${buckets.some(val) ? '' : '<div class="empty-chart">Belum ada penjualan di periode ini.</div>'}
     <div class="chart-tip" hidden></div>`;
 
     const svg = el.querySelector('svg'), tip = el.querySelector('.chart-tip');
@@ -1180,7 +1222,7 @@
       el.querySelector(`.bar[data-i="${i}"]`)?.classList.add('on');
       tip.innerHTML = `<span>${esc(b.long)}</span><b>Rp ${rp(b.amount)}</b><span>${b.n} transaksi</span>`;
       tip.style.left = Math.min(Math.max(m.l + band * (i + .5), 70), W - 70) + 'px';
-      tip.style.top = Math.min(y(b.amount), m.t + ph - 4) + 'px';
+      tip.style.top = Math.min(y(val(b)), m.t + ph - 4) + 'px';
       tip.hidden = false;
     };
     svg.addEventListener('pointerover', e => { const i = e.target.dataset?.i; if (i != null) show(Number(i)); });
@@ -1189,7 +1231,7 @@
   let resizeRaf;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeRaf);
-    resizeRaf = requestAnimationFrame(() => { if (currentTab === 'laporan' && lastChart.length) drawSalesChart(); });
+    resizeRaf = requestAnimationFrame(() => { if (currentTab === 'laporan') Object.keys(charts).forEach(drawBarChart); });
   });
 
   boot();
