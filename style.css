@@ -105,6 +105,11 @@ input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
   .tab .count { margin-left: 2px; min-width: 18px; padding: 0 5px; }
   .cart { top: 0; }
 }
+/* HP: enam tab dalam dua baris (3 × 2) supaya semuanya terlihat tanpa digeser */
+@media (max-width: 560px) {
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
+  .tab { text-align: center; }
+}
 
 .demo-banner {
   padding: 8px 16px; background: var(--warn-tint); color: var(--warn);
@@ -394,3 +399,6 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 /* ---------- Kirim foto nota ke WA ---------- */
 .wa-row { margin-top: 8px; align-items: center; }
 .wa-hint { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--ok-tint); color: var(--ok); font-size: 14px; font-weight: 600; }
+
+/* ---------- Kontak ---------- */
+#contactSearch { max-width: 360px; margin-bottom: 12px; }

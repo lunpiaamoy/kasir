@@ -75,7 +75,7 @@
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
-  ['recentTable', 'stockTable', 'topTable', 'dailyTable', 'cashHistory'].forEach(makeSortable);
+  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'cashHistory'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -131,6 +131,7 @@
     document.querySelectorAll('.view').forEach(v => (v.hidden = v.id !== 'view-' + name));
     if (name === 'kasir') { loadProducts(); refreshNotices(); }
     if (name === 'pesanan') renderOrders();
+    if (name === 'kontak') renderContacts();
     if (name === 'stok') loadProducts();
     if (name === 'kas') renderCash();
     if (name === 'laporan') renderReport();
@@ -246,20 +247,33 @@
     if (v !== 'langsung' && !$('fDate').value) $('fDate').value = ymdLocal(new Date());
   });
 
-  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10.30).
-  // Angka ke-5 memulai lagi dari jam. Nilai disimpan sebagai "HH:MM".
+  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10:30).
+  // Angka ke-5 memulai lagi dari jam. Batas: jam 00–24, menit 00–59 (24 hanya 24:00).
+  // Angka pertama 3–9 otomatis jadi jam 03–09; angka menit pertama 6–9 jadi menit 06–09.
+  // Nilai disimpan sebagai "HH:MM".
   const timeDigits = () => $('fTime').value.replace(/\D/g, '').slice(0, 4);
-  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}.${d.slice(2)}` : d);
+  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d);
   const timeValue = () => { const d = timeDigits(); return d.length === 4 ? `${d.slice(0, 2)}:${d.slice(2)}` : ''; };
-  const timeValid = () => { const d = timeDigits(); return d.length === 4 && +d.slice(0, 2) < 24 && +d.slice(2) < 60; };
+  const timeValid = () => {
+    const d = timeDigits(), h = +d.slice(0, 2), m = +d.slice(2);
+    return d.length === 4 && m < 60 && (h < 24 || (h === 24 && m === 0));
+  };
+  function addTimeDigit(d, ch) {
+    if (d.length >= 4) d = '';
+    if (d.length === 0) return ch > '2' ? '0' + ch : ch;
+    if (d.length === 1) return +(d + ch) > 24 ? d : d + ch;         // jam lebih dari 24 diabaikan
+    if (d === '24' || d === '240') return ch === '0' ? d + ch : d;  // 24 hanya boleh 24:00
+    if (d.length === 2) return ch > '5' ? d + '0' + ch : d + ch;
+    return d + ch;
+  }
   $('fTime').addEventListener('beforeinput', e => {
     if (!e.inputType.startsWith('insert')) return;   // hapus/backspace biarkan
     e.preventDefault();
     let d = timeDigits();
-    for (const ch of (e.data || '').replace(/\D/g, '')) d = (d.length >= 4 ? '' : d) + ch;
+    for (const ch of (e.data || '').replace(/\D/g, '')) d = addTimeDigit(d, ch);
     showTime(d);
   });
-  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan titiknya
+  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan pemisahnya
 
   // Pembayaran
   $('paySeg').addEventListener('click', e => {
@@ -572,6 +586,61 @@
       }
       else if ('refreshOrders' in d) renderOrders();
     } catch (err) { toast(err.message, true); }
+  });
+
+  // ---------------------------------------------------------------- Contacts
+  // Daftar kontak disusun dari nama & WA yang tercatat di transaksi (tanpa tabel baru).
+  // Satu kontak per nomor WA (atau per nama kalau tanpa nomor); nama yang dipakai = nama terakhir.
+  let contacts = [];
+  async function renderContacts() {
+    let rows;
+    try { rows = await DB.listCustomers(); } catch (e) { toast(e.message, true); return; }
+    const map = new Map();
+    rows.filter(o => (o.customer_name || '').trim() || (o.customer_wa || '').trim()).forEach(o => {
+      const num = waNumber(o.customer_wa), key = num || 'n:' + o.customer_name.trim().toLowerCase();
+      const c = map.get(key) || { name: '', wa: '', n: 0, spent: 0, last: '' };
+      if (o.created_at >= c.last) { c.last = o.created_at; if (o.customer_name.trim()) c.name = o.customer_name.trim(); if (o.customer_wa) c.wa = o.customer_wa.trim(); }
+      if (!c.name && o.customer_name.trim()) c.name = o.customer_name.trim();
+      if (o.status !== 'batal') { c.n++; c.spent += o.total; }
+      map.set(key, c);
+    });
+    contacts = [...map.values()].sort((a, b) => b.last.localeCompare(a.last));
+    $('contactCount').textContent = `${contacts.length} kontak`;
+    $('contactTable').innerHTML = `
+      <thead><tr><th>Nama</th><th>WA</th><th class="num">Transaksi</th><th class="num">Total belanja</th><th>Terakhir beli</th><th></th></tr></thead>
+      <tbody>${contacts.length ? contacts.map((c, i) => {
+        const d = new Date(c.last);
+        return `<tr data-search="${esc((c.name + ' ' + c.wa + ' ' + waNumber(c.wa)).toLowerCase())}">
+          <td><b>${esc(c.name || '-')}</b></td>
+          <td>${esc(c.wa || '-')}</td>
+          <td class="num">${c.n}</td>
+          <td class="num">${rp(c.spent)}</td>
+          <td data-sort="${esc(c.last)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
+          <td><div class="add-stock">
+            <button class="primary small" data-neworder="${i}">Pesan baru</button>
+            ${c.wa ? `<button class="ghost small" data-wachat="${esc(c.wa)}">${isMobile ? 'Chat WA' : 'Salin nomor'}</button>` : ''}
+          </div></td>
+        </tr>`;
+      }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
+    filterContacts();
+  }
+  function filterContacts() {
+    const q = $('contactSearch').value.trim().toLowerCase(), qn = q.replace(/\D/g, '').replace(/^0/, '62');
+    $('contactTable').querySelectorAll('tbody tr[data-search]').forEach(r => {
+      r.hidden = !!q && !r.dataset.search.includes(q) && !(qn && r.dataset.search.includes(qn));
+    });
+  }
+  $('contactSearch').addEventListener('input', filterContacts);
+  $('contactTable').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.wachat) return waContact(b.dataset.wachat);
+    if (b.dataset.neworder) {
+      const c = contacts[Number(b.dataset.neworder)];
+      resetCart();
+      $('custName').value = c.name; $('custWa').value = c.wa;
+      openTab('kasir');
+      toast(`Pesanan baru untuk ${c.name || c.wa}`);
+    }
   });
 
   // ---------------------------------------------------------------- Stock
