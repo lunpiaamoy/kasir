@@ -15,10 +15,15 @@
     return {
       demo: false,
       async session() { const { data } = await sb.auth.getSession(); return data.session; },
-      onAuth(cb) { sb.auth.onAuthStateChange((_e, s) => cb(s)); },
+      // Callback dijalankan lewat setTimeout: memanggil Supabase langsung di dalam
+      // onAuthStateChange bisa membuat supabase-js macet (deadlock) saat login/refresh.
+      onAuth(cb) { sb.auth.onAuthStateChange((_e, s) => { setTimeout(() => cb(s), 0); }); },
       async signIn(email, password) {
         const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw new Error('Email atau password salah.');
+        if (!error) return;
+        if (error.message === 'Invalid login credentials') throw new Error('Email atau password salah.');
+        if (error.message === 'Email not confirmed') throw new Error('Email belum dikonfirmasi. Centang "Auto Confirm User" atau konfirmasi user di Supabase.');
+        throw new Error('Gagal masuk: ' + error.message);
       },
       async signOut() { await sb.auth.signOut(); },
       async isStaff() { const { data, error } = await sb.rpc('is_staff'); fail(error); return data === true; },
