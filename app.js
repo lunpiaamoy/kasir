@@ -365,6 +365,7 @@
                 <button class="primary small" data-done="${o.id}">Tandai selesai</button>
                 <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
                 <button class="ghost small danger" data-cancel="${o.id}">Batalkan</button>
+                <button class="ghost small danger" data-del="${o.id}">Hapus</button>
               </div>
             </article>`;
           }).join('')}</div>
@@ -385,7 +386,10 @@
           <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
           <td class="num">${rp(o.total)}</td>
           <td>${statusChip(o.status)}</td>
-          <td><button class="ghost small" data-reprint="${o.id}">Cetak ulang</button></td>
+          <td><div class="add-stock" data-actions>
+            <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
+            <button class="ghost small danger" data-del="${o.id}">Hapus</button>
+          </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="8">Belum ada transaksi.</td></tr>'}</tbody>`;
   }
@@ -403,6 +407,18 @@
           <button class="ghost small" data-refresh-orders>Tidak</button></div></div>`;
       }
       else if (d.cancelyes) { await DB.cancelOrder(Number(d.cancelyes)); toast('Pesanan dibatalkan, stok dikembalikan'); renderOrders(); loadProducts(); }
+      else if (d.del) {
+        const o = orderCache.get(Number(d.del));
+        t.closest('[data-actions]').innerHTML = `<div class="confirm">Hapus nota ${notaNo(o)} secara permanen?
+          ${o.status === 'batal' ? 'Transaksi' : 'Stok dikembalikan dan transaksi'} ini hilang dari laporan. Tidak bisa dikembalikan.
+          <div class="actions"><button class="primary small" data-delyes="${o.id}">Ya, hapus</button>
+          <button class="ghost small" data-refresh-orders>Tidak</button></div></div>`;
+      }
+      else if (d.delyes) {
+        const o = orderCache.get(Number(d.delyes));
+        await DB.deleteOrder(o.id); orderCache.delete(o.id);
+        toast(`Nota ${notaNo(o)} dihapus`); renderOrders(); loadProducts();
+      }
       else if ('refreshOrders' in d) renderOrders();
     } catch (err) { toast(err.message, true); }
   });

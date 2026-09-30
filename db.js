@@ -70,6 +70,11 @@
       },
       async setStatus(id, status) { const { error } = await sb.from('orders').update({ status }).eq('id', id); fail(error); },
       async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
+      // Hapus permanen: stok dikembalikan dulu (cancel_order tidak berbuat apa-apa kalau sudah batal)
+      async deleteOrder(id) {
+        await this.cancelOrder(id);
+        const { error } = await sb.from('orders').delete().eq('id', id); fail(error);
+      },
 
       // Kartu stok: semua perubahan stok satu produk sejak fromIso sampai sekarang.
       // Transaksi batal tidak ikut karena stoknya sudah dikembalikan.
@@ -178,6 +183,10 @@
           o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
           o.status = 'batal'; save();
         }
+      },
+      async deleteOrder(id) {
+        await this.cancelOrder(id);
+        const db = load(); db.orders = db.orders.filter(o => o.id !== id); save();
       },
       async stockCard(productId, fromIso) {
         const db = load();
