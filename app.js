@@ -405,22 +405,18 @@
   //  - HP: langsung aplikasi WhatsApp.
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // Format pesan mengikuti contoh dari toko
   function waText(o) {
     const d = new Date(o.created_at);
-    const lines = [
-      `*${STORE.name}*`, `Nota ${notaNo(o)}`, `${dmy(d)} ${pad(d.getHours())}.${pad(d.getMinutes())}`, '',
+    return [
+      `*${STORE.name.toUpperCase()}*`, '',
       ...o.order_items.map(i => `${i.category} ${i.name}\n  ${i.qty} x ${rp(i.price)} = ${rp(i.subtotal)}`), '',
-      `*Total: Rp ${rp(o.total)}*`,
-      o.pay_method === 'qris' ? 'Dibayar: QRIS' : `Tunai: Rp ${rp(o.paid)}${o.change ? ` · Kembalian: Rp ${rp(o.change)}` : ''}`,
-    ];
-    if (o.fulfillment !== 'langsung') {
-      lines.push('', `${o.fulfillment === 'kirim' ? 'Dikirim' : 'Diambil'}: ${o.fulfill_date ? longDate(parseYmd(o.fulfill_date)) : '-'}${o.fulfill_time ? ' pukul ' + hhmm(o.fulfill_time) : ''}`);
-      if (o.fulfillment === 'kirim' && o.ongkir) lines.push(`Ongkir: Rp ${rp(o.ongkir)}`);
-    }
-    if (o.note) lines.push(`Catatan: ${o.note}`);
-    if (o.status === 'batal') lines.push('', '*NOTA INI DIBATALKAN*');
-    lines.push('', 'Terima kasih.', `${STORE.address} · ${STORE.phone}`);
-    return lines.join('\n');
+      `*Total: Rp ${rp(o.total)}*`, '',
+      ...(o.status === 'batal' ? ['*NOTA INI DIBATALKAN*', ''] : []),
+      'Terima Kasih.', '',
+      STORE.name, STORE.address, STORE.phone, '',
+      notaNo(o), dmy(d), `${pad(d.getHours())}.${pad(d.getMinutes())}`,
+    ].join('\n');
   }
 
   // Nomor WA di kartu pesanan: HP → buka chat di aplikasi; laptop → salin nomor (untuk dicari di WhatsApp Web)
@@ -436,7 +432,7 @@
     const num = waNumber(o.customer_wa), text = encodeURIComponent(waText(o));
     if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
     window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${text}`, '_blank');
-    $('waHint').textContent = `Chat ${o.customer_name || 'pembeli'} dibuka di tab WhatsApp Web dengan isi nota. Tekan Enter untuk mengirim.`;
+    $('waHint').textContent = 'Chat WhatsApp pembeli sudah dibuka di tab baru dengan isi nota. Tekan Enter untuk mengirim.';
     $('waHint').hidden = false;
   });
 
