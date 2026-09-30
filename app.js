@@ -246,20 +246,33 @@
     if (v !== 'langsung' && !$('fDate').value) $('fDate').value = ymdLocal(new Date());
   });
 
-  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10.30).
-  // Angka ke-5 memulai lagi dari jam. Nilai disimpan sebagai "HH:MM".
+  // Pukul: ketik 4 angka → 2 pertama jam, 2 berikutnya menit (1030 → 10:30).
+  // Angka ke-5 memulai lagi dari jam. Batas: jam 00–24, menit 00–59 (24 hanya 24:00).
+  // Angka pertama 3–9 otomatis jadi jam 03–09; angka menit pertama 6–9 jadi menit 06–09.
+  // Nilai disimpan sebagai "HH:MM".
   const timeDigits = () => $('fTime').value.replace(/\D/g, '').slice(0, 4);
-  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}.${d.slice(2)}` : d);
+  const showTime = d => ($('fTime').value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d);
   const timeValue = () => { const d = timeDigits(); return d.length === 4 ? `${d.slice(0, 2)}:${d.slice(2)}` : ''; };
-  const timeValid = () => { const d = timeDigits(); return d.length === 4 && +d.slice(0, 2) < 24 && +d.slice(2) < 60; };
+  const timeValid = () => {
+    const d = timeDigits(), h = +d.slice(0, 2), m = +d.slice(2);
+    return d.length === 4 && m < 60 && (h < 24 || (h === 24 && m === 0));
+  };
+  function addTimeDigit(d, ch) {
+    if (d.length >= 4) d = '';
+    if (d.length === 0) return ch > '2' ? '0' + ch : ch;
+    if (d.length === 1) return +(d + ch) > 24 ? d : d + ch;         // jam lebih dari 24 diabaikan
+    if (d === '24' || d === '240') return ch === '0' ? d + ch : d;  // 24 hanya boleh 24:00
+    if (d.length === 2) return ch > '5' ? d + '0' + ch : d + ch;
+    return d + ch;
+  }
   $('fTime').addEventListener('beforeinput', e => {
     if (!e.inputType.startsWith('insert')) return;   // hapus/backspace biarkan
     e.preventDefault();
     let d = timeDigits();
-    for (const ch of (e.data || '').replace(/\D/g, '')) d = (d.length >= 4 ? '' : d) + ch;
+    for (const ch of (e.data || '').replace(/\D/g, '')) d = addTimeDigit(d, ch);
     showTime(d);
   });
-  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan titiknya
+  $('fTime').addEventListener('input', () => showTime(timeDigits()));   // setelah hapus: rapikan pemisahnya
 
   // Pembayaran
   $('paySeg').addEventListener('click', e => {
