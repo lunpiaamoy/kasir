@@ -83,12 +83,13 @@
     const clone = x => JSON.parse(JSON.stringify(x));
     const jakartaYear = () => Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date()));
     let signedIn = true;
+    let authCb = () => {};
 
     return {
       demo: true,
       async session() { return signedIn ? { user: { email: 'contoh@lunpia.local' } } : null; },
-      onAuth() {},
-      async signIn() { signedIn = true; },
+      onAuth(cb) { authCb = cb; },
+      async signIn() { signedIn = true; authCb({ user: { email: 'contoh@lunpia.local' } }); },
       async signOut() { signedIn = false; },
       async isStaff() { return true; },
 
