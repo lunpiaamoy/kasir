@@ -544,7 +544,57 @@
     if (e.key === 'Enter' && e.target.id?.startsWith('add-')) e.target.nextElementSibling.click();
   });
 
+  // ---------------------------------------------------------------- Stock opname (pemilik)
+  function openOpname() {
+    $('productForm').hidden = true;
+    const list = products.filter(p => p.active);
+    $('opnameTable').innerHTML = `
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Sistem</th><th>Fisik</th><th class="num">Selisih</th></tr></thead>
+      <tbody>${list.map(p => `<tr>
+        <td>${esc(p.category)}</td><td><b>${esc(p.name)}</b></td>
+        <td class="num stock-num">${p.stock}</td>
+        <td><input class="count-in" inputmode="numeric" data-count="${p.id}" aria-label="Hitungan fisik ${esc(p.category + ' ' + p.name)}"></td>
+        <td class="num" data-diff="${p.id}"></td>
+      </tr>`).join('')}</tbody>`;
+    $('opnameSum').textContent = '';
+    $('opnameForm').hidden = false;
+    $('opnameTable').querySelector('input')?.focus();
+  }
+  function opnameEntries() {
+    return [...$('opnameTable').querySelectorAll('[data-count]')]
+      .filter(i => i.value.trim() !== '')
+      .map(i => ({ product_id: Number(i.dataset.count), counted: toInt(i.value) }));
+  }
+  $('opnameTable').addEventListener('input', e => {
+    const inp = e.target.closest('[data-count]'); if (!inp) return;
+    const id = Number(inp.dataset.count), cell = $('opnameTable').querySelector(`[data-diff="${id}"]`);
+    const d = inp.value.trim() === '' ? null : toInt(inp.value) - byId(id).stock;
+    cell.innerHTML = d == null ? '' : d === 0 ? '<span class="chip ok">Cocok</span>' : `<span class="${d > 0 ? 'in' : 'out'}">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>`;
+    const entries = opnameEntries(), diff = entries.filter(x => x.counted !== byId(x.product_id).stock).length;
+    $('opnameSum').textContent = entries.length ? `${entries.length} produk dihitung · ${diff} berbeda dari sistem` : '';
+  });
+  $('opnameTable').addEventListener('keydown', e => {   // Enter pindah ke produk berikutnya
+    if (e.key !== 'Enter' || !e.target.matches('[data-count]')) return;
+    e.preventDefault();
+    const all = [...$('opnameTable').querySelectorAll('[data-count]')];
+    all[all.indexOf(e.target) + 1]?.focus();
+  });
+  $('opnameBtn').addEventListener('click', openOpname);
+  $('cancelOpnameBtn').addEventListener('click', () => ($('opnameForm').hidden = true));
+  $('opnameForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const entries = opnameEntries();
+    if (!entries.length) return toast('Isi hitungan fisik minimal satu produk', true);
+    try {
+      const n = await DB.stockOpname(entries);
+      $('opnameForm').hidden = true;
+      toast(n ? `Opname disimpan · ${n} produk disesuaikan` : 'Opname disimpan · semua stok cocok');
+      loadProducts();
+    } catch (err) { toast(err.message, true); }
+  });
+
   function openProductForm(p) {
+    $('opnameForm').hidden = true;
     editingId = p?.id ?? null;
     $('productFormTitle').textContent = p ? `Ubah ${p.category} ${p.name}` : 'Tambah produk';
     $('pCategory').value = p?.category ?? '';
@@ -740,6 +790,7 @@
 
   let recount = false;
   async function renderCash() {
+    renderCashHistory();
     let c;
     try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = ''; toast(e.message, true); return; }
     const { cd, cash, n } = c;
@@ -779,6 +830,27 @@
       $('cashDiff').innerHTML = $('cashCounted').value ? `Selisih: ${diffTxt(v - expected)}` : '';
     });
   }
+  async function renderCashHistory() {
+    const from = new Date(); from.setDate(from.getDate() - 13);
+    let days;
+    try { days = await DB.listCashDays(ymdLocal(from)); } catch (e) { toast(e.message, true); return; }
+    const who = e => esc((e || '').split('@')[0]);
+    $('cashHistory').innerHTML = `
+      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th></tr></thead>
+      <tbody>${days.length ? days.map(c => {
+        const d = c.closed_at ? c.counted - c.expected : null;
+        return `<tr>
+          <td>${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+          <td class="num">${rp(c.opening)}</td>
+          <td class="num">${c.closed_at ? rp(c.expected) : '—'}</td>
+          <td class="num">${c.closed_at ? rp(c.counted) : '—'}</td>
+          <td>${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
+          <td class="muted">${who(c.closed_by)}</td>
+          <td class="muted">${esc(c.note || '')}</td>
+        </tr>`;
+      }).join('') : '<tr><td class="empty" colspan="7">Belum ada catatan kas.</td></tr>'}</tbody>`;
+  }
+
   $('cashPanel').addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;
     const day = ymdLocal(todayRange()[0]);

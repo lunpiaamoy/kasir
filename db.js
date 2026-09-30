@@ -64,6 +64,8 @@
       async addStock(id, delta, note) {
         const { error } = await sb.rpc('add_stock', { p_product: id, p_delta: delta, p_note: note }); fail(error);
       },
+      // [{ product_id, counted }] → jumlah produk yang stoknya disesuaikan
+      async stockOpname(list) { const { data, error } = await sb.rpc('stock_opname', { p: list }); fail(error); return data; },
 
       async createOrder(payload) {
         const { data, error } = await sb.rpc('create_order', { p: payload }); fail(error); return data;
@@ -107,6 +109,10 @@
       // Kas harian (tanggal = 'YYYY-MM-DD')
       async getCashDay(day) {
         const { data, error } = await sb.from('cash_days').select('*').eq('day', day).maybeSingle(); fail(error); return data;
+      },
+      async listCashDays(fromDay) {
+        const { data, error } = await sb.from('cash_days').select('*').gte('day', fromDay).order('day', { ascending: false });
+        fail(error); return data;
       },
       async openCash(day, opening) {
         const { error } = await sb.from('cash_days').upsert({ day, opening }, { onConflict: 'day' }); fail(error);
@@ -169,6 +175,17 @@
         db.products.find(x => x.id === id).stock += delta;
         (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
+      },
+      async stockOpname(list) {
+        const db = load(); let n = 0;
+        list.forEach(({ product_id, counted }) => {
+          const p = db.products.find(x => x.id === product_id);
+          if (!p || counted === p.stock) return;
+          (db.moves ||= []).push({ product_id, delta: counted - p.stock, note: `Stok opname · sistem ${p.stock}, fisik ${counted}`,
+            created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+          p.stock = counted; n++;
+        });
+        save(); return n;
       },
 
       async createOrder(p) {
@@ -258,6 +275,9 @@
       },
 
       async getCashDay(day) { return clone((load().cash || {})[day] || null); },
+      async listCashDays(fromDay) {
+        return clone(Object.values(load().cash || {}).filter(c => c.day >= fromDay).sort((a, b) => b.day.localeCompare(a.day)));
+      },
       async openCash(day, opening) {
         const db = load(); db.cash ||= {};
         db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening };

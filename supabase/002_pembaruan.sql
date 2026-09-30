@@ -13,6 +13,7 @@
 --  5. Catatan per pesanan.
 --  6. Hapus & ubah nota diproses sekaligus di database (tidak setengah jalan).
 --  7. Kas harian: uang awal dan tutup kasir.
+--  8. Stok opname: stok sistem disamakan dengan hitungan fisik (pemilik).
 -- =====================================================================
 
 begin;
@@ -235,6 +236,35 @@ begin
   values (p_product, p_delta, coalesce(p_note, ''), auth.jwt() ->> 'email');
 end $$;
 
+-- ---------- Stok opname (pemilik) ----------
+-- p = [{ "product_id": 1, "counted": 28 }, ...]. Stok sistem disamakan dengan hitungan fisik;
+-- selisihnya dicatat di riwayat stok. Stok dibaca saat disimpan (dikunci), jadi penjualan
+-- yang terjadi selama menghitung tidak hilang.
+create or replace function public.stock_opname(p jsonb) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  it jsonb;
+  prod public.products;
+  v_counted integer;
+  n integer := 0;
+begin
+  if not public.is_owner() then raise exception 'Hanya pemilik yang bisa menyimpan stok opname'; end if;
+  for it in select * from jsonb_array_elements(coalesce(p, '[]'::jsonb)) loop
+    v_counted := (it ->> 'counted')::int;
+    if v_counted is null or v_counted < 0 then raise exception 'Hitungan fisik tidak valid'; end if;
+    select * into prod from public.products where id = (it ->> 'product_id')::bigint for update;
+    if not found then raise exception 'Produk tidak ditemukan'; end if;
+    if v_counted <> prod.stock then
+      update public.products set stock = v_counted where id = prod.id;
+      insert into public.stock_moves (product_id, delta, note, created_by)
+      values (prod.id, v_counted - prod.stock,
+              format('Stok opname · sistem %s, fisik %s', prod.stock, v_counted), auth.jwt() ->> 'email');
+      n := n + 1;
+    end if;
+  end loop;
+  return n;
+end $$;
+
 -- ---------- 7. Kas harian ----------
 create table if not exists public.cash_days (
   day        date primary key,               -- tanggal (WIB)
@@ -284,12 +314,12 @@ grant insert, update on public.products to authenticated;
 grant select, insert, update on public.cash_days to authenticated;
 
 revoke execute on function public.my_role(), public.is_owner(), public.update_order(bigint, jsonb),
-  public.delete_order(bigint), public.mark_done(bigint) from public, anon;
+  public.delete_order(bigint), public.mark_done(bigint), public.stock_opname(jsonb) from public, anon;
 revoke execute on function public.create_order(jsonb), public.cancel_order(bigint),
   public.add_stock(bigint, integer, text) from public, anon;
 grant execute on function public.my_role(), public.is_owner(), public.create_order(jsonb),
   public.update_order(bigint, jsonb), public.cancel_order(bigint), public.delete_order(bigint),
-  public.mark_done(bigint), public.add_stock(bigint, integer, text) to authenticated;
+  public.mark_done(bigint), public.stock_opname(jsonb), public.add_stock(bigint, integer, text) to authenticated;
 
 -- ---------- Keamanan: rls_auto_enable() dari Supabase tidak perlu bisa dipanggil pengguna ----------
 do $$

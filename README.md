@@ -7,9 +7,9 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 - **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama, WA, dan catatan pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk atau kirim nota lewat **WhatsApp**. Di atas halaman kasir muncul pengingat: uang awal belum diisi, pesanan terlewat, dan pesanan hari ini/besok.
 - **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`, dan tidak pernah dipakai ulang walaupun nota dihapus. Ongkir dicatat terpisah dan tidak masuk total.
 - **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan). Pemilik juga bisa **mengubah** dan **menghapus** nota.
-- **Stok**: tambah stok, koreksi stok, tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
+- **Stok**: tambah stok, koreksi stok, **stok opname** (isi hitungan fisik, lihat selisihnya, lalu stok sistem disamakan), tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
 - **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**.
-- **Kas harian**: isi uang awal saat buka, lalu **tutup kasir** dengan menghitung uang di laci. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai) dan selisihnya.
+- **Kas harian**: isi uang awal saat buka, lalu **tutup kasir** dengan menghitung uang di laci. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai) dan selisihnya. **Riwayat kas 14 hari** menampilkan selisih setiap hari.
 
 ## Pemilik dan kasir
 
@@ -21,7 +21,7 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 | Uang awal & tutup kasir | ✅ | ✅ |
 | **Ubah** dan **hapus** nota | ✅ | ❌ |
 | Tambah/ubah produk dan harga | ✅ | ❌ |
-| Koreksi stok (mengurangi) | ✅ | ❌ |
+| Koreksi stok (mengurangi) dan stok opname | ✅ | ❌ |
 | Mengubah kas yang sudah ditutup | ✅ | ❌ |
 
 Batasan ini dipasang di database, bukan hanya dengan menyembunyikan tombol.
@@ -73,4 +73,4 @@ Tombol **Cetak** membuka jendela Print bawaan perangkat. Pilih printer thermal, 
 
 ## Teknis
 
-HTML, CSS, dan JavaScript biasa, tanpa proses build, dengan [supabase-js](https://github.com/supabase/supabase-js) dari CDN. Semua perhitungan total, nomor nota, perubahan stok, ubah/hapus nota, dan pengecekan peran dijalankan di database (fungsi `create_order`, `update_order`, `delete_order`, `cancel_order`, `add_stock`), jadi aman dipakai beberapa kasir sekaligus.
+HTML, CSS, dan JavaScript biasa, tanpa proses build, dengan [supabase-js](https://github.com/supabase/supabase-js) dari CDN. Semua perhitungan total, nomor nota, perubahan stok, ubah/hapus nota, dan pengecekan peran dijalankan di database (fungsi `create_order`, `update_order`, `delete_order`, `cancel_order`, `add_stock`, `stock_opname`), jadi aman dipakai beberapa kasir sekaligus.

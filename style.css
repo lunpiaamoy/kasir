@@ -132,6 +132,13 @@ body:not(.is-owner) .owner-only { display: none !important; }
 .cash-row > div { flex: 1 1 180px; }
 .cash-row .grow { flex: 2 1 220px; }
 .cash-diff { margin: 8px 0 0; }
+.cash-history { padding: 12px 16px; }
+.cash-history summary { cursor: pointer; font-weight: 700; }
+.cash-history[open] summary { margin-bottom: 10px; }
+.head-actions { margin-top: 0; }
+.count-in { width: 90px; padding: 6px 8px; }
+.opname-sum { margin: 10px 0 0; font-weight: 600; }
+#opnameForm .hint { margin: 4px 0 10px; }
 .edit-banner { background: var(--warn-tint); color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 6px; }
 .order-note { font-size: 14px; font-style: italic; }
 
