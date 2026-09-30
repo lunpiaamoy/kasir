@@ -103,6 +103,10 @@
       async updateOrder(id, payload) {
         const { data, error } = await sb.rpc('update_order', { p_id: id, p: payload }); fail(error); return data;
       },
+      // Semua pembeli yang pernah dicatat (untuk daftar kontak)
+      async listCustomers() {
+        return all(() => sb.from('orders').select('id, customer_name, customer_wa, total, status, created_at').order('id'));
+      },
       async markDone(id) {
         const { error } = await sb.rpc('mark_done', { p_id: id });
         if (error?.code === 'PGRST202') {   // database belum diperbarui: cara lama
@@ -282,6 +286,9 @@
           .sort((a, b) => (a.fulfill_date || '9').localeCompare(b.fulfill_date || '9') || (a.fulfill_time || '').localeCompare(b.fulfill_time || ''));
       },
       async recentOrders(limit = 30) { return clone(load().orders.slice(-limit).reverse()); },
+      async listCustomers() {
+        return load().orders.map(({ id, customer_name, customer_wa, total, status, created_at }) => ({ id, customer_name, customer_wa, total, status, created_at }));
+      },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id) {
         const db = load(); const o = db.orders.find(x => x.id === id);

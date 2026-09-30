@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -25,6 +25,7 @@
   <nav class="tabs" aria-label="Menu">
     <button class="tab" data-tab="kasir" aria-current="page">Kasir</button>
     <button class="tab" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
+    <button class="tab" data-tab="kontak">Kontak</button>
     <button class="tab" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
     <button class="tab" data-tab="kas">Kas</button>
     <button class="tab" data-tab="laporan">Laporan</button>
@@ -126,6 +127,16 @@
 
     <div class="view-head"><h2>Transaksi terakhir</h2></div>
     <div class="table-wrap"><table class="table" id="recentTable"></table></div>
+  </section>
+
+  <!-- ============ Kontak ============ -->
+  <section class="view" id="view-kontak" hidden>
+    <div class="view-head">
+      <h2>Kontak pembeli</h2>
+      <span class="muted" id="contactCount"></span>
+    </div>
+    <input id="contactSearch" type="search" placeholder="Cari nama atau nomor WA" autocomplete="off" aria-label="Cari kontak">
+    <div class="table-wrap contact-table"><table class="table" id="contactTable"></table></div>
   </section>
 
   <!-- ============ Stok ============ -->
@@ -265,9 +276,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=16"></script>
-<script src="db.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="config.js?v=17"></script>
+<script src="db.js?v=17"></script>
+<script src="app.js?v=17"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
