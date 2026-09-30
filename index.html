@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -26,6 +26,7 @@
     <button class="tab" data-tab="kasir" aria-current="page">Kasir</button>
     <button class="tab" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
     <button class="tab" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
+    <button class="tab" data-tab="kas">Kas</button>
     <button class="tab" data-tab="laporan">Laporan</button>
   </nav>
   <div class="who">
@@ -168,13 +169,17 @@
     <div class="table-wrap"><table class="table" id="stockTable"></table></div>
   </section>
 
+  <!-- ============ Kas ============ -->
+  <section class="view" id="view-kas" hidden>
+    <section class="panel cash" id="cashPanel" aria-labelledby="cashTitle"></section>
+    <section class="cash-history" aria-labelledby="cashHistoryTitle">
+      <div class="view-head"><h2 id="cashHistoryTitle">Riwayat kas 14 hari terakhir</h2></div>
+      <div class="table-wrap"><table class="table" id="cashHistory"></table></div>
+    </section>
+  </section>
+
   <!-- ============ Laporan ============ -->
   <section class="view" id="view-laporan" hidden>
-    <section class="panel cash" id="cashPanel" aria-labelledby="cashTitle"></section>
-    <details class="panel cash-history">
-      <summary>Riwayat kas 14 hari terakhir</summary>
-      <div class="table-wrap"><table class="table" id="cashHistory"></table></div>
-    </details>
 
     <div class="view-head">
       <h2>Laporan penjualan</h2>
@@ -222,9 +227,16 @@
     <p class="muted hint">Di jendela Print pilih printer thermal, ukuran kertas 58 mm, margin <b>None</b>.</p>
     <div class="actions">
       <button class="primary" id="printBtn">Cetak</button>
-      <button class="ghost" id="waBtn">Kirim WA</button>
       <button class="ghost" id="closeReceiptBtn">Tutup</button>
     </div>
+    <div class="actions wa-row">
+      <button class="ghost" id="waBtn">Kirim foto nota ke WA</button>
+      <select id="waMode" class="wa-mode" aria-label="Buka WhatsApp di">
+        <option value="app">di aplikasi WhatsApp</option>
+        <option value="web">di WhatsApp Web</option>
+      </select>
+    </div>
+    <p class="wa-hint" id="waHint" role="status" hidden></p>
   </div>
 </div>
 
@@ -257,9 +269,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=5"></script>
-<script src="db.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=10"></script>
+<script src="db.js?v=10"></script>
+<script src="app.js?v=10"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

@@ -28,10 +28,54 @@
     seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range) === val)));
   }
 
+  // ---------------------------------------------------------------- Sort tabel
+  // Klik judul kolom: urut naik, klik lagi: turun. Nilai diambil dari data-sort di sel kalau ada
+  // (mis. tanggal ISO), selain itu dari teksnya; angka "Rp 1.250.000" dibandingkan sebagai angka.
+  // Urutan dipertahankan saat tabel digambar ulang. Kolom tanpa judul atau data-nosort dilewati.
+  const sortState = {};
+  const cellKey = td => {
+    const raw = (td?.dataset.sort ?? td?.textContent ?? '').trim();
+    const n = raw.replace(/^Rp\s*/i, '').replace(/\./g, '').replace(/^[−–]/, '-').replace(',', '.');
+    return /^-?\d+(\.\d+)?$/.test(n) ? Number(n) : raw.toLowerCase();
+  };
+  function applySort(table) {
+    const st = sortState[table.id], ths = [...table.querySelectorAll('thead th')];
+    ths.forEach((th, i) => {
+      const on = st && st.col === i;
+      th.classList.toggle('sort-asc', on && st.dir === 1);
+      th.classList.toggle('sort-desc', on && st.dir === -1);
+      if (th.textContent.trim() && !('nosort' in th.dataset)) { th.classList.add('sortable'); th.tabIndex = 0; th.setAttribute('aria-sort', on ? (st.dir === 1 ? 'ascending' : 'descending') : 'none'); }
+    });
+    const tbody = table.tBodies[0];
+    if (!st || !tbody) return;
+    const rows = [...tbody.rows].filter(r => !r.querySelector('td.empty'));
+    rows.sort((a, b) => {
+      const x = cellKey(a.cells[st.col]), y = cellKey(b.cells[st.col]);
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'id', { numeric: true });
+      return c * st.dir;
+    });
+    rows.forEach(r => tbody.append(r));
+  }
+  function makeSortable(id) {
+    const table = $(id);
+    const toggle = th => {
+      if (!th?.classList.contains('sortable')) return;
+      const col = [...th.parentElement.children].indexOf(th), st = sortState[id];
+      sortState[id] = { col, dir: st?.col === col ? -st.dir : 1 };
+      applySort(table);
+    };
+    table.addEventListener('click', e => toggle(e.target.closest('thead th')));
+    table.addEventListener('keydown', e => { if (e.key === 'Enter') toggle(e.target.closest('thead th')); });
+    // Tabel digambar ulang lewat innerHTML → pasang lagi tanda & urutan
+    new MutationObserver(() => applySort(table)).observe(table, { childList: true });
+  }
+
   // ---------------------------------------------------------------- State
   let products = [];
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
+
+  ['recentTable', 'stockTable', 'topTable', 'dailyTable', 'cashHistory'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -88,7 +132,8 @@
     if (name === 'kasir') { loadProducts(); refreshNotices(); }
     if (name === 'pesanan') renderOrders();
     if (name === 'stok') loadProducts();
-    if (name === 'laporan') { renderCash(); renderReport(); }
+    if (name === 'kas') renderCash();
+    if (name === 'laporan') renderReport();
   }
   document.querySelectorAll('[data-refresh]').forEach(b => b.addEventListener('click', () => openTab(currentTab)));
 
@@ -353,45 +398,84 @@
     if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
     window.print();
   }
-  // Nota lewat WhatsApp toko: membuka chat dengan pesan yang sudah terisi, kasir tinggal kirim
+  // ---- Nota ke WhatsApp sebagai foto ----
+  // Situs tidak boleh melampirkan gambar ke WhatsApp secara langsung, jadi:
+  //  - Laptop: foto nota disalin ke clipboard, lalu chat pembeli dibuka; kasir tinggal tempel (Cmd/Ctrl+V) + Enter.
+  //    Chat dibuka di aplikasi WhatsApp (whatsapp://, tanpa tab baru) atau WhatsApp Web (pilihan disimpan per perangkat).
+  //    Tab WhatsApp Web yang sudah terbuka tidak bisa dipakai ulang: WhatsApp memutus hubungan tab-nya dari situs lain.
+  //  - HP: menu Bagikan dengan foto nota terlampir; pilih WhatsApp lalu kontak.
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
-  // Laptop: WhatsApp Web langsung ke chat pembeli, selalu di tab yang sama (nama 'lunpia-wa'),
-  // jadi setelah pertama kali tidak membuka tab baru lagi. HP: langsung aplikasi WhatsApp.
-  // Tab WhatsApp Web yang dibuka sendiri (bukan dari aplikasi ini) tidak bisa dipakai: dibatasi browser.
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  function openWa(phone, text = '') {
-    const num = waNumber(phone), t = text ? encodeURIComponent(text) : '';
-    if (isMobile) return void (location.href = `https://wa.me/${num}${t ? '?text=' + t : ''}`);
-    const w = window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${t}`, 'lunpia-wa');
-    w?.focus();
+  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent);
+  const WA_KEY = 'lunpiaWaMode';
+  const waMode = () => { try { return localStorage.getItem(WA_KEY) || 'app'; } catch { return 'app'; } };
+  $('waMode').value = waMode();
+  $('waMode').hidden = isMobile;
+  $('waMode').addEventListener('change', () => { try { localStorage.setItem(WA_KEY, $('waMode').value); } catch {} });
+
+  function openWa(phone) {
+    const num = waNumber(phone);
+    if (isMobile) return void (location.href = `https://wa.me/${num}`);
+    if (waMode() === 'app') return void (location.href = num ? `whatsapp://send?phone=${num}` : 'whatsapp://');
+    window.open(`https://web.whatsapp.com/send${num ? '?phone=' + num : ''}`, 'lunpia-wa')?.focus();
   }
-  function waText(o) {
-    const d = new Date(o.created_at);
-    const lines = [
-      `*${STORE.name}*`, `Nota ${notaNo(o)}`, `${dmy(d)} ${pad(d.getHours())}.${pad(d.getMinutes())}`, '',
-      ...o.order_items.map(i => `${i.category} ${i.name}\n  ${i.qty} x ${rp(i.price)} = ${rp(i.subtotal)}`), '',
-      `*Total: Rp ${rp(o.total)}*`,
-      o.pay_method === 'qris' ? 'Dibayar: QRIS' : `Tunai: Rp ${rp(o.paid)}${o.change ? ` · Kembalian: Rp ${rp(o.change)}` : ''}`,
-    ];
-    if (o.fulfillment !== 'langsung') {
-      lines.push('', `${o.fulfillment === 'kirim' ? 'Dikirim' : 'Diambil'}: ${o.fulfill_date ? longDate(parseYmd(o.fulfill_date)) : '-'}${o.fulfill_time ? ' pukul ' + hhmm(o.fulfill_time) : ''}`);
-      if (o.fulfillment === 'kirim' && o.ongkir) lines.push(`Ongkir: Rp ${rp(o.ongkir)}`);
-    }
-    if (o.note) lines.push(`Catatan: ${o.note}`);
-    if (o.status === 'batal') lines.push('', '*NOTA INI DIBATALKAN*');
-    lines.push('', 'Terima kasih.', `${STORE.address} · ${STORE.phone}`);
-    return lines.join('\n');
+
+  let libImage;
+  const loadHtmlToImage = () => (libImage ||= new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
+    s.onload = () => ok(window.htmlToImage); s.onerror = () => { libImage = null; fail(new Error('Gagal memuat pembuat gambar. Periksa internet.')); };
+    document.head.append(s);
+  }));
+  async function receiptBlob() {
+    const lib = await loadHtmlToImage(), node = $('receipt');
+    const img = node.querySelector('img');
+    if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
+    const opt = { pixelRatio: 3, backgroundColor: '#ffffff', style: { boxShadow: 'none', margin: '0' } };
+    if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) await lib.toBlob(node, opt);   // Safari: gambar logo baru muncul di percobaan kedua
+    return lib.toBlob(node, opt);
   }
+  let receiptImg = null;   // Promise<Blob>, disiapkan saat struk dibuka supaya tombol langsung jalan
+  const notaFile = o => `nota-${o.year}-${pad(o.seq, 5)}.png`;
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   let receiptOrder = null;
-  $('waBtn').addEventListener('click', () => {
+  $('waBtn').addEventListener('click', async () => {
     const o = receiptOrder; if (!o) return;
-    openWa(o.customer_wa, waText(o));
+    receiptImg ||= receiptBlob();
+    receiptImg.catch(() => (receiptImg = null));
+    const hint = m => { $('waHint').textContent = m; $('waHint').hidden = false; };
+    try {
+      if (isMobile) {
+        const file = new File([await receiptImg], notaFile(o), { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file] }).catch(e => { if (e.name !== 'AbortError') throw e; });
+          return hint('Pilih WhatsApp, lalu kontak pembeli.');
+        }
+        download(file, file.name); openWa(o.customer_wa);
+        return hint('Foto nota diunduh. Lampirkan dari galeri/unduhan di chat WhatsApp.');
+      }
+      let copied = false;
+      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': receiptImg })]); copied = true; } catch {}
+      if (!copied) download(await receiptImg, notaFile(o));
+      openWa(o.customer_wa);
+      hint(copied
+        ? `Foto nota sudah disalin. Di chat WhatsApp tekan ${isMac ? 'Cmd' : 'Ctrl'}+V, lalu Enter.`
+        : 'Foto nota diunduh. Lampirkan dari folder Unduhan di chat WhatsApp.');
+    } catch (e) { toast(e.message, true); }
   });
 
   function showReceipt(order, autoPrint = false) {
     receiptOrder = order;
-    $('waBtn').textContent = order.customer_wa ? 'Kirim WA' : 'Kirim WA (pilih kontak)';
+    $('waHint').hidden = true;
     $('receipt').innerHTML = receiptHtml(order);
+    receiptImg = null;
+    setTimeout(() => { if (receiptOrder === order) (receiptImg = receiptBlob()).catch(() => (receiptImg = null)); }, 0);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
     if (autoPrint) doPrint();
@@ -458,12 +542,13 @@
 
     const statusChip = s => s === 'batal' ? '<span class="chip bad">Batal</span>' : s === 'menunggu' ? '<span class="chip warn">Menunggu</span>' : '<span class="chip ok">Selesai</span>';
     $('recentTable').innerHTML = `
-      <thead><tr><th>Nota</th><th>Waktu</th><th>Pembeli</th><th>Jenis</th><th>Bayar</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nota</th><th>Tanggal</th><th>Waktu</th><th>Pembeli</th><th>Jenis</th><th>Bayar</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
       <tbody>${recent.length ? recent.map(o => {
         const d = new Date(o.created_at);
         return `<tr class="${o.status === 'batal' ? 'dim' : ''}">
           <td class="num">${notaNo(o)}</td>
-          <td>${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
+          <td data-sort="${esc(o.created_at)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
+          <td data-sort="${pad(d.getHours())}${pad(d.getMinutes())}">${pad(d.getHours())}.${pad(d.getMinutes())}</td>
           <td>${esc(o.customer_name || '-')}</td>
           <td>${FUL_LABEL[o.fulfillment]}</td>
           <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
@@ -475,7 +560,7 @@
             <button class="ghost small danger owner-only" data-del="${o.id}">Hapus</button>
           </div></td>
         </tr>`;
-      }).join('') : '<tr><td class="empty" colspan="8">Belum ada transaksi.</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td class="empty" colspan="9">Belum ada transaksi.</td></tr>'}</tbody>`;
   }
 
   $('view-pesanan').addEventListener('click', async e => {
@@ -518,14 +603,14 @@
       : 'Semua stok aman.';
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
     $('stockTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Stok</th><th>Status</th><th>Tambah stok</th><th></th></tr></thead>
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Stok</th><th>Status</th><th data-nosort>Tambah stok</th><th></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
         <tr class="${p.active ? '' : 'dim'}">
           <td>${esc(p.category)}</td>
           <td><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
           <td class="num">${rp(p.price)}</td>
           <td class="num stock-num">${p.stock}</td>
-          <td>${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
+          <td data-sort="${p.stock - p.min_stock}">${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
           <td><div class="add-stock">
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
@@ -785,7 +870,7 @@
     })).filter(b => b.n).reverse();
     $('periodTitle').textContent = listUnit === 'month' ? 'Per bulan' : 'Per hari';
     $('dailyTable').innerHTML = `<thead><tr><th>${listUnit === 'month' ? 'Bulan' : 'Tanggal'}</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
-      <tbody>${rows.length ? rows.map(b => `<tr><td>${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
+      <tbody>${rows.length ? rows.map(b => `<tr><td data-sort="${esc(b.key)}">${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
   }
 
@@ -891,11 +976,11 @@
       <tbody>${days.length ? days.map(c => {
         const d = c.closed_at ? c.counted - c.expected : null;
         return `<tr>
-          <td>${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+          <td data-sort="${esc(c.day)}">${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
           <td class="num">${rp(c.opening)}</td>
           <td class="num">${c.closed_at ? rp(c.expected) : '—'}</td>
           <td class="num">${c.closed_at ? rp(c.counted) : '—'}</td>
-          <td>${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
+          <td data-sort="${d ?? ''}">${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
         </tr>`;
@@ -934,7 +1019,7 @@
     const nTomorrow = pending.filter(o => o.fulfill_date === tomorrow).length;
     const items = [];
     if (DB.needsUpdate) items.push(`<div class="notice bad"><b>Database belum diperbarui.</b> Aplikasi berjalan dengan cara lama: semua staf dianggap pemilik, dan kas harian, stok opname, serta ubah/hapus nota belum bisa dipakai. Jalankan file <b>supabase/002_pembaruan.sql</b> di Supabase (SQL Editor → Run), lalu muat ulang halaman ini.</div>`);
-    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="laporan">Isi sekarang</button></div>`);
+    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
     if (late) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     if (nToday || nTomorrow) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     $('kasirNotices').innerHTML = items.join('');

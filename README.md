@@ -4,12 +4,12 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 
 ## Fitur
 
-- **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama, WA, dan catatan pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk atau kirim nota lewat **WhatsApp** (di laptop langsung membuka chat pembeli di WhatsApp Web, selalu di tab yang sama; di HP langsung aplikasi WhatsApp). Di atas halaman kasir muncul pengingat: uang awal belum diisi, pesanan terlewat, dan pesanan hari ini/besok.
+- **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama, WA, dan catatan pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk atau kirim **foto nota lewat WhatsApp**: di laptop foto nota disalin lalu chat pembeli dibuka (di aplikasi WhatsApp atau WhatsApp Web), tinggal tekan Cmd/Ctrl+V lalu Enter; di HP muncul menu Bagikan dengan foto nota terlampir. Di atas halaman kasir muncul pengingat: uang awal belum diisi, pesanan terlewat, dan pesanan hari ini/besok.
 - **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`, dan tidak pernah dipakai ulang walaupun nota dihapus. Ongkir dicatat terpisah dan tidak masuk total.
 - **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan). Pemilik juga bisa **mengubah** dan **menghapus** nota.
 - **Stok**: tambah stok, koreksi stok, **stok opname** (isi hitungan fisik, lihat selisihnya, lalu stok sistem disamakan), tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
 - **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**.
-- **Kas harian**: isi uang awal saat buka dan hitung uang di laci saat **tutup kasir**, keduanya **per pecahan** (100.000 sampai 1.000; koin ratusan tidak dihitung). Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai) dan selisihnya. **Riwayat kas 14 hari** menampilkan selisih setiap hari.
+- **Kas** (tab tersendiri): isi uang awal saat buka dan hitung uang di laci saat **tutup kasir**, keduanya **per pecahan** (100.000 sampai 1.000; koin ratusan tidak dihitung). Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai) dan selisihnya. **Riwayat kas 14 hari** menampilkan selisih setiap hari.
 
 ## Pemilik dan kasir
 
