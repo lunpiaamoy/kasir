@@ -167,6 +167,19 @@ begin
   insert into public.stock_moves (product_id, delta, note) values (p_product, p_delta, coalesce(p_note, ''));
 end $$;
 
+-- ---------- Izin akses Data API ----------
+-- Hanya pengguna yang login (authenticated) yang diberi akses; pengunjung anonim tidak sama sekali.
+-- Diperlukan kalau "Automatically expose new tables" dimatikan saat membuat project.
+grant usage on schema public to authenticated;
+grant select on public.staff to authenticated;
+grant select, insert, update, delete on public.products, public.stock_moves, public.orders, public.order_items to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+
+revoke execute on function public.is_staff(), public.create_order(jsonb), public.cancel_order(bigint),
+  public.add_stock(bigint, integer, text) from public, anon;
+grant execute on function public.is_staff(), public.create_order(jsonb), public.cancel_order(bigint),
+  public.add_stock(bigint, integer, text) to authenticated;
+
 -- ---------- Produk awal (dari contoh nota; stok mulai 0, ubah di menu Stok) ----------
 insert into public.products (category, name, price, stock, min_stock, sort) values
   ('Lunpia Basah',  'Ayam',             25000, 0, 5, 10),
