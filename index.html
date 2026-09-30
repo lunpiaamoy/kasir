@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -217,6 +217,12 @@
       <figcaption><h3 id="chartTitle">Penjualan</h3><span class="muted" id="chartSub"></span></figcaption>
       <div class="chart" id="salesChart"></div>
     </figure>
+    <figure class="panel chart-panel" id="hourPanel" hidden>
+      <figcaption><h3>Jam ramai</h3><span class="muted">Transaksi per jam, dijumlahkan untuk semua hari di periode ini</span></figcaption>
+      <p class="hour-sum" id="hourSum"></p>
+      <div class="chart" id="hourChart"></div>
+      <div class="table-wrap"><table class="table" id="hourTable"></table></div>
+    </figure>
     <div class="report-grid">
       <div>
         <h3>Produk terlaris</h3>
@@ -276,9 +282,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=19"></script>
-<script src="db.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="config.js?v=20"></script>
+<script src="db.js?v=20"></script>
+<script src="app.js?v=20"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
