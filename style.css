@@ -132,7 +132,8 @@ body:not(.is-owner) .owner-only { display: none !important; }
 .cash-row > div { flex: 1 1 180px; }
 .cash-row .grow { flex: 2 1 220px; }
 .cash-diff { margin: 8px 0 0; font-weight: 600; min-height: 1.4em; }
-.denoms { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 6px 32px; margin: 6px 0 4px; max-width: 620px; }
+/* Satu kolom: pecahan besar di atas, mengecil ke bawah (100.000 → 1.000) */
+.denoms { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 6px 0 4px; max-width: 290px; }
 .denom { display: grid; grid-template-columns: 76px 12px 64px 90px; align-items: center; gap: 6px; margin: 0; font-weight: 500; }
 .denom .d-face { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
 .denom .d-x { color: var(--muted); text-align: center; }
