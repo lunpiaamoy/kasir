@@ -61,6 +61,29 @@
       },
       async setStatus(id, status) { const { error } = await sb.from('orders').update({ status }).eq('id', id); fail(error); },
       async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
+
+      // Kartu stok: semua perubahan stok satu produk sejak fromIso sampai sekarang.
+      // Transaksi batal tidak ikut karena stoknya sudah dikembalikan.
+      async stockCard(productId, fromIso) {
+        const all = async build => {
+          const rows = [];
+          for (let i = 0; ; i += 1000) {
+            const { data, error } = await build().range(i, i + 999);
+            fail(error); rows.push(...data);
+            if (data.length < 1000) return rows;
+          }
+        };
+        const [moves, sold] = await Promise.all([
+          all(() => sb.from('stock_moves').select('id, delta, note, created_by, created_at')
+            .eq('product_id', productId).gte('created_at', fromIso).order('id')),
+          all(() => sb.from('order_items').select('id, qty, orders!inner(created_at, status, year, seq, customer_name, cashier)')
+            .eq('product_id', productId).gte('orders.created_at', fromIso).neq('orders.status', 'batal').order('id')),
+        ]);
+        return [
+          ...moves.map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by })),
+          ...sold.map(i => ({ at: i.orders.created_at, delta: -i.qty, order: i.orders, by: i.orders.cashier })),
+        ];
+      },
     };
   }
 
@@ -105,7 +128,12 @@
         else db.products.push({ ...p, id: db.nextId++, stock: 0 });
         save();
       },
-      async addStock(id, delta) { load().products.find(x => x.id === id).stock += delta; save(); },
+      async addStock(id, delta, note = '') {
+        const db = load();
+        db.products.find(x => x.id === id).stock += delta;
+        (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+        save();
+      },
 
       async createOrder(p) {
         const db = load();
@@ -149,6 +177,16 @@
           o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
           o.status = 'batal'; save();
         }
+      },
+      async stockCard(productId, fromIso) {
+        const db = load();
+        return [
+          ...(db.moves || []).filter(m => m.product_id === productId && m.created_at >= fromIso)
+            .map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by })),
+          ...db.orders.filter(o => o.status !== 'batal' && o.created_at >= fromIso).flatMap(o =>
+            o.order_items.filter(i => i.product_id === productId)
+              .map(i => ({ at: o.created_at, delta: -i.qty, order: o, by: 'contoh@lunpia.local' }))),
+        ];
       },
       resetDemo() { mem = seed(); save(); },
     };

@@ -269,6 +269,14 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
   max-height: calc(100vh - 32px); overflow: auto;
 }
 .sheet h2 { margin-bottom: 12px; }
+.sheet.wide { width: min(820px, 100%); }
+.sheet.wide .metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.sheet.wide .range-custom { flex-wrap: wrap; max-width: 100%; }
+.sheet.wide .range-custom input { flex: 1 1 130px; min-width: 0; }
+#cardTable td:first-child { white-space: nowrap; }
+.sheet .view-head h2 { margin-bottom: 0; }
+.in { color: var(--ok); font-weight: 700; }
+.out { color: var(--bad); font-weight: 700; }
 .paper { background: #f1eeee; padding: 16px; border-radius: 10px; display: flex; justify-content: center; }
 .hint { font-size: 13px; margin: 10px 0 0; }
 

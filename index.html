@@ -191,6 +191,32 @@
   </div>
 </div>
 
+<!-- ============ Kartu stok ============ -->
+<div class="modal" id="cardModal" hidden>
+  <div class="sheet wide" role="dialog" aria-modal="true" aria-labelledby="cardTitle">
+    <div class="view-head">
+      <h2 id="cardTitle">Kartu stok</h2>
+      <button class="ghost small" id="closeCardBtn">Tutup</button>
+    </div>
+    <div class="range">
+      <div class="seg compact" id="cardRangeSeg">
+        <button type="button" data-range="month" aria-checked="true">Bulan ini</button>
+        <button type="button" data-range="lastmonth" aria-checked="false">Bulan lalu</button>
+        <button type="button" data-range="90d" aria-checked="false">3 bulan</button>
+      </div>
+      <div class="range-custom">
+        <input type="date" id="cFrom" aria-label="Dari tanggal">
+        <span>–</span>
+        <input type="date" id="cTo" aria-label="Sampai tanggal">
+        <button class="ghost small" id="cApply">Tampilkan</button>
+      </div>
+    </div>
+    <div class="metrics" id="cardMetrics"></div>
+    <div class="table-wrap"><table class="table" id="cardTable"></table></div>
+    <p class="muted hint">Transaksi yang dibatalkan tidak ditampilkan karena stoknya sudah dikembalikan.</p>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>

@@ -428,7 +428,10 @@
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
           </div></td>
-          <td><button class="ghost small" data-edit="${p.id}">Ubah</button></td>
+          <td><div class="add-stock">
+            <button class="ghost small" data-card="${p.id}">Kartu stok</button>
+            <button class="ghost small" data-edit="${p.id}">Ubah</button>
+          </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="7">Belum ada produk.</td></tr>'}</tbody>`;
   }
 
@@ -443,6 +446,7 @@
       catch (err) { toast(err.message, true); }
     }
     if (t.dataset.edit) openProductForm(byId(Number(t.dataset.edit)));
+    if (t.dataset.card) openStockCard(byId(Number(t.dataset.card)));
   });
   $('stockTable').addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.id?.startsWith('add-')) e.target.nextElementSibling.click();
@@ -477,6 +481,82 @@
     try { await DB.saveProduct(p); $('productForm').hidden = true; toast('Produk disimpan'); loadProducts(); }
     catch (err) { toast(err.message, true); }
   });
+
+  // ---------------------------------------------------------------- Stock card
+  // Saldo dihitung mundur dari stok sekarang, jadi selalu cocok dengan angka di tabel stok.
+  let cardProduct = null, cardRange = null;
+  function cardRangeFor(key) {
+    const now = new Date(), tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    if (key === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), tomorrow];
+    if (key === 'lastmonth') return [new Date(now.getFullYear(), now.getMonth() - 1, 1), new Date(now.getFullYear(), now.getMonth(), 1)];
+    if (key === '90d') return [new Date(now.getFullYear(), now.getMonth(), now.getDate() - 89), tomorrow];
+  }
+  function openStockCard(p) {
+    cardProduct = p; cardRange = cardRangeFor('month');
+    setSeg($('cardRangeSeg'), 'month');
+    $('cardTitle').textContent = `Kartu stok · ${p.category} ${p.name}`;
+    $('cardModal').hidden = false;
+    renderStockCard();
+  }
+  const closeCard = () => ($('cardModal').hidden = true);
+  $('closeCardBtn').addEventListener('click', closeCard);
+  $('cardModal').addEventListener('click', e => { if (e.target === $('cardModal')) closeCard(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCard(); });
+  $('cardRangeSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-range]'); if (!b) return;
+    setSeg($('cardRangeSeg'), b.dataset.range); cardRange = cardRangeFor(b.dataset.range); renderStockCard();
+  });
+  $('cApply').addEventListener('click', () => {
+    if (!$('cFrom').value || !$('cTo').value) return toast('Pilih tanggal awal dan akhir', true);
+    const from = parseYmd($('cFrom').value), to = new Date(+parseYmd($('cTo').value) + 864e5);
+    if (to <= from) return toast('Tanggal akhir harus setelah tanggal awal', true);
+    setSeg($('cardRangeSeg'), ''); cardRange = [from, to]; renderStockCard();
+  });
+
+  async function renderStockCard() {
+    const p = cardProduct, [from, to] = cardRange;
+    $('cFrom').value = ymdLocal(from); $('cTo').value = ymdLocal(new Date(+to - 864e5));
+    $('cardTable').innerHTML = '<tbody><tr><td class="empty">Memuat…</td></tr></tbody>';
+    let moves;
+    try { moves = await DB.stockCard(p.id, from.toISOString()); }
+    catch (e) { toast(e.message, true); return; }
+    if (cardProduct !== p || cardRange[0] !== from) return;   // sudah ganti produk/periode
+
+    moves.sort((a, b) => new Date(a.at) - new Date(b.at));
+    const current = byId(p.id)?.stock ?? p.stock;
+    const opening = current - moves.reduce((s, m) => s + m.delta, 0);
+    const rows = moves.filter(m => new Date(m.at) < to);
+    let bal = opening;
+    rows.forEach(m => (m.balance = bal += m.delta));
+    const inQty = rows.reduce((s, m) => s + Math.max(m.delta, 0), 0);
+    const outQty = rows.reduce((s, m) => s - Math.min(m.delta, 0), 0);
+
+    $('cardMetrics').innerHTML = `
+      <div class="metric"><small>Stok awal</small><b>${opening}</b><span>${esc(dmy(from))}</span></div>
+      <div class="metric"><small>Masuk</small><b class="in">+${inQty}</b></div>
+      <div class="metric"><small>Keluar</small><b class="out">−${outQty}</b></div>
+      <div class="metric lead"><small>Stok akhir</small><b>${bal}</b><span>${esc(dmy(new Date(+to - 864e5)))}</span></div>`;
+
+    const desc = m => m.order
+      ? `Terjual · Nota ${notaNo(m.order)}${m.order.customer_name ? ' · ' + esc(m.order.customer_name) : ''}`
+      : esc(m.note || (m.delta > 0 ? 'Tambah stok' : 'Koreksi stok'));
+    $('cardTable').innerHTML = `
+      <thead><tr><th>Tanggal</th><th>Keterangan</th><th class="num">Masuk</th><th class="num">Keluar</th><th class="num">Saldo</th><th>Oleh</th></tr></thead>
+      <tbody>
+        <tr class="dim"><td>${esc(dmy(from))}</td><td>Stok awal</td><td></td><td></td><td class="num">${opening}</td><td></td></tr>
+        ${rows.map(m => {
+          const d = new Date(m.at);
+          return `<tr>
+            <td>${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
+            <td>${desc(m)}</td>
+            <td class="num in">${m.delta > 0 ? m.delta : ''}</td>
+            <td class="num out">${m.delta < 0 ? -m.delta : ''}</td>
+            <td class="num"><b>${m.balance}</b></td>
+            <td class="muted">${esc((m.by || '').split('@')[0])}</td>
+          </tr>`;
+        }).join('') || '<tr><td class="empty" colspan="6">Tidak ada mutasi stok di periode ini.</td></tr>'}
+      </tbody>`;
+  }
 
   // ---------------------------------------------------------------- Report
   let range = rangeFor('today');

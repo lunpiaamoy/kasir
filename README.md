@@ -7,7 +7,7 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 - **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama dan WA pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk.
 - **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`. Ongkir dicatat terpisah dan tidak masuk total.
 - **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan).
-- **Stok**: tambah atau koreksi stok, tambah atau ubah produk, dan peringatan stok menipis.
+- **Stok**: tambah atau koreksi stok, tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
 - **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, atau rentang tanggal pilihan. Tunai dan QRIS ditampilkan terpisah, lengkap dengan produk terlaris dan rekap per hari.
 
 ## Mode contoh
