@@ -398,45 +398,84 @@
     if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
     window.print();
   }
-  // Nota lewat WhatsApp toko: membuka chat dengan pesan yang sudah terisi, kasir tinggal kirim
+  // ---- Nota ke WhatsApp sebagai foto ----
+  // Situs tidak boleh melampirkan gambar ke WhatsApp secara langsung, jadi:
+  //  - Laptop: foto nota disalin ke clipboard, lalu chat pembeli dibuka; kasir tinggal tempel (Cmd/Ctrl+V) + Enter.
+  //    Chat dibuka di aplikasi WhatsApp (whatsapp://, tanpa tab baru) atau WhatsApp Web (pilihan disimpan per perangkat).
+  //    Tab WhatsApp Web yang sudah terbuka tidak bisa dipakai ulang: WhatsApp memutus hubungan tab-nya dari situs lain.
+  //  - HP: menu Bagikan dengan foto nota terlampir; pilih WhatsApp lalu kontak.
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
-  // Laptop: WhatsApp Web langsung ke chat pembeli, selalu di tab yang sama (nama 'lunpia-wa'),
-  // jadi setelah pertama kali tidak membuka tab baru lagi. HP: langsung aplikasi WhatsApp.
-  // Tab WhatsApp Web yang dibuka sendiri (bukan dari aplikasi ini) tidak bisa dipakai: dibatasi browser.
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  function openWa(phone, text = '') {
-    const num = waNumber(phone), t = text ? encodeURIComponent(text) : '';
-    if (isMobile) return void (location.href = `https://wa.me/${num}${t ? '?text=' + t : ''}`);
-    const w = window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${t}`, 'lunpia-wa');
-    w?.focus();
+  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent);
+  const WA_KEY = 'lunpiaWaMode';
+  const waMode = () => { try { return localStorage.getItem(WA_KEY) || 'app'; } catch { return 'app'; } };
+  $('waMode').value = waMode();
+  $('waMode').hidden = isMobile;
+  $('waMode').addEventListener('change', () => { try { localStorage.setItem(WA_KEY, $('waMode').value); } catch {} });
+
+  function openWa(phone) {
+    const num = waNumber(phone);
+    if (isMobile) return void (location.href = `https://wa.me/${num}`);
+    if (waMode() === 'app') return void (location.href = num ? `whatsapp://send?phone=${num}` : 'whatsapp://');
+    window.open(`https://web.whatsapp.com/send${num ? '?phone=' + num : ''}`, 'lunpia-wa')?.focus();
   }
-  function waText(o) {
-    const d = new Date(o.created_at);
-    const lines = [
-      `*${STORE.name}*`, `Nota ${notaNo(o)}`, `${dmy(d)} ${pad(d.getHours())}.${pad(d.getMinutes())}`, '',
-      ...o.order_items.map(i => `${i.category} ${i.name}\n  ${i.qty} x ${rp(i.price)} = ${rp(i.subtotal)}`), '',
-      `*Total: Rp ${rp(o.total)}*`,
-      o.pay_method === 'qris' ? 'Dibayar: QRIS' : `Tunai: Rp ${rp(o.paid)}${o.change ? ` · Kembalian: Rp ${rp(o.change)}` : ''}`,
-    ];
-    if (o.fulfillment !== 'langsung') {
-      lines.push('', `${o.fulfillment === 'kirim' ? 'Dikirim' : 'Diambil'}: ${o.fulfill_date ? longDate(parseYmd(o.fulfill_date)) : '-'}${o.fulfill_time ? ' pukul ' + hhmm(o.fulfill_time) : ''}`);
-      if (o.fulfillment === 'kirim' && o.ongkir) lines.push(`Ongkir: Rp ${rp(o.ongkir)}`);
-    }
-    if (o.note) lines.push(`Catatan: ${o.note}`);
-    if (o.status === 'batal') lines.push('', '*NOTA INI DIBATALKAN*');
-    lines.push('', 'Terima kasih.', `${STORE.address} · ${STORE.phone}`);
-    return lines.join('\n');
+
+  let libImage;
+  const loadHtmlToImage = () => (libImage ||= new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
+    s.onload = () => ok(window.htmlToImage); s.onerror = () => { libImage = null; fail(new Error('Gagal memuat pembuat gambar. Periksa internet.')); };
+    document.head.append(s);
+  }));
+  async function receiptBlob() {
+    const lib = await loadHtmlToImage(), node = $('receipt');
+    const img = node.querySelector('img');
+    if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
+    const opt = { pixelRatio: 3, backgroundColor: '#ffffff', style: { boxShadow: 'none', margin: '0' } };
+    if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) await lib.toBlob(node, opt);   // Safari: gambar logo baru muncul di percobaan kedua
+    return lib.toBlob(node, opt);
   }
+  let receiptImg = null;   // Promise<Blob>, disiapkan saat struk dibuka supaya tombol langsung jalan
+  const notaFile = o => `nota-${o.year}-${pad(o.seq, 5)}.png`;
+  function download(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   let receiptOrder = null;
-  $('waBtn').addEventListener('click', () => {
+  $('waBtn').addEventListener('click', async () => {
     const o = receiptOrder; if (!o) return;
-    openWa(o.customer_wa, waText(o));
+    receiptImg ||= receiptBlob();
+    receiptImg.catch(() => (receiptImg = null));
+    const hint = m => { $('waHint').textContent = m; $('waHint').hidden = false; };
+    try {
+      if (isMobile) {
+        const file = new File([await receiptImg], notaFile(o), { type: 'image/png' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file] }).catch(e => { if (e.name !== 'AbortError') throw e; });
+          return hint('Pilih WhatsApp, lalu kontak pembeli.');
+        }
+        download(file, file.name); openWa(o.customer_wa);
+        return hint('Foto nota diunduh. Lampirkan dari galeri/unduhan di chat WhatsApp.');
+      }
+      let copied = false;
+      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': receiptImg })]); copied = true; } catch {}
+      if (!copied) download(await receiptImg, notaFile(o));
+      openWa(o.customer_wa);
+      hint(copied
+        ? `Foto nota sudah disalin. Di chat WhatsApp tekan ${isMac ? 'Cmd' : 'Ctrl'}+V, lalu Enter.`
+        : 'Foto nota diunduh. Lampirkan dari folder Unduhan di chat WhatsApp.');
+    } catch (e) { toast(e.message, true); }
   });
 
   function showReceipt(order, autoPrint = false) {
     receiptOrder = order;
-    $('waBtn').textContent = order.customer_wa ? 'Kirim WA' : 'Kirim WA (pilih kontak)';
+    $('waHint').hidden = true;
     $('receipt').innerHTML = receiptHtml(order);
+    receiptImg = null;
+    setTimeout(() => { if (receiptOrder === order) (receiptImg = receiptBlob()).catch(() => (receiptImg = null)); }, 0);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
     if (autoPrint) doPrint();
