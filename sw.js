@@ -1,7 +1,7 @@
 // Service worker supaya kasir bisa dipasang di layar utama HP/tablet.
 // Selalu ambil versi terbaru dari internet dulu; salinan tersimpan hanya dipakai saat
 // offline, supaya tampilan tetap terbuka. Data (Supabase) dan CDN tidak disentuh.
-const CACHE = 'lunpia-kasir-v1';
+const CACHE = 'lunpia-kasir-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {
@@ -13,8 +13,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  // cache: 'no-cache' = selalu tanya server apakah ada versi baru (cache browser GitHub Pages 10 menit)
   e.respondWith(
-    fetch(req)
+    fetch(req.url, { cache: 'no-cache' })   // lewat URL: permintaan halaman (navigate) tidak boleh diberi opsi
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;
