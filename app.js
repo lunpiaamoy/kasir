@@ -88,7 +88,8 @@
     if (name === 'kasir') { loadProducts(); refreshNotices(); }
     if (name === 'pesanan') renderOrders();
     if (name === 'stok') loadProducts();
-    if (name === 'laporan') { renderCash(); renderReport(); }
+    if (name === 'kas') renderCash();
+    if (name === 'laporan') renderReport();
   }
   document.querySelectorAll('[data-refresh]').forEach(b => b.addEventListener('click', () => openTab(currentTab)));
 
@@ -934,7 +935,7 @@
     const nTomorrow = pending.filter(o => o.fulfill_date === tomorrow).length;
     const items = [];
     if (DB.needsUpdate) items.push(`<div class="notice bad"><b>Database belum diperbarui.</b> Aplikasi berjalan dengan cara lama: semua staf dianggap pemilik, dan kas harian, stok opname, serta ubah/hapus nota belum bisa dipakai. Jalankan file <b>supabase/002_pembaruan.sql</b> di Supabase (SQL Editor → Run), lalu muat ulang halaman ini.</div>`);
-    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="laporan">Isi sekarang</button></div>`);
+    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
     if (late) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     if (nToday || nTomorrow) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     $('kasirNotices').innerHTML = items.join('');
