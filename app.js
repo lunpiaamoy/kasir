@@ -399,25 +399,22 @@
     window.print();
   }
   // ---- Nota ke WhatsApp sebagai foto ----
-  // Situs tidak boleh melampirkan gambar ke WhatsApp secara langsung, jadi:
-  //  - Laptop: foto nota disalin ke clipboard, lalu chat pembeli dibuka; kasir tinggal tempel (Cmd/Ctrl+V) + Enter.
-  //    Chat dibuka di aplikasi WhatsApp (whatsapp://, tanpa tab baru) atau WhatsApp Web (pilihan disimpan per perangkat).
-  //    Tab WhatsApp Web yang sudah terbuka tidak bisa dipakai ulang: WhatsApp memutus hubungan tab-nya dari situs lain.
+  // Situs tidak bisa melampirkan gambar ke WhatsApp, dan tidak bisa membuka/mengarahkan tab WhatsApp Web
+  // yang sudah terbuka (WhatsApp memutus hubungan tab dengan situs lain). Jadi:
+  //  - Laptop: foto nota disalin saja, tanpa membuka tab. Kasir pindah ke tab WhatsApp Web-nya sendiri,
+  //    pilih chat pembeli, lalu Cmd/Ctrl+V dan Enter.
   //  - HP: menu Bagikan dengan foto nota terlampir; pilih WhatsApp lalu kontak.
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isMac = /Mac/i.test(navigator.platform || navigator.userAgent);
-  const WA_KEY = 'lunpiaWaMode';
-  const waMode = () => { try { return localStorage.getItem(WA_KEY) || 'app'; } catch { return 'app'; } };
-  $('waMode').value = waMode();
-  $('waMode').hidden = isMobile;
-  $('waMode').addEventListener('change', () => { try { localStorage.setItem(WA_KEY, $('waMode').value); } catch {} });
+  const pasteKey = isMac ? 'Cmd+V' : 'Ctrl+V';
+  $('waBtn').textContent = isMobile ? 'Bagikan foto nota ke WA' : 'Salin foto nota untuk WA';
 
-  function openWa(phone) {
-    const num = waNumber(phone);
-    if (isMobile) return void (location.href = `https://wa.me/${num}`);
-    if (waMode() === 'app') return void (location.href = num ? `whatsapp://send?phone=${num}` : 'whatsapp://');
-    window.open(`https://web.whatsapp.com/send${num ? '?phone=' + num : ''}`, 'lunpia-wa')?.focus();
+  // Nomor WA di kartu pesanan: HP → buka chat di aplikasi; laptop → salin nomor (untuk dicari di WhatsApp Web)
+  async function waContact(phone) {
+    if (isMobile) return void (location.href = `https://wa.me/${waNumber(phone)}`);
+    try { await navigator.clipboard.writeText(phone); toast(`Nomor ${phone} disalin. Tempel di kolom cari WhatsApp Web.`); }
+    catch { toast(`Nomor WA: ${phone}`); }
   }
 
   let libImage;
@@ -449,24 +446,25 @@
     const o = receiptOrder; if (!o) return;
     receiptImg ||= receiptBlob();
     receiptImg.catch(() => (receiptImg = null));
+    const who = [o.customer_name, o.customer_wa].filter(Boolean).join(' · ');
     const hint = m => { $('waHint').textContent = m; $('waHint').hidden = false; };
     try {
       if (isMobile) {
         const file = new File([await receiptImg], notaFile(o), { type: 'image/png' });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file] }).catch(e => { if (e.name !== 'AbortError') throw e; });
-          return hint('Pilih WhatsApp, lalu kontak pembeli.');
+          return hint(`Pilih WhatsApp, lalu kontak pembeli${who ? ` (${who})` : ''}.`);
         }
-        download(file, file.name); openWa(o.customer_wa);
+        download(file, file.name);
         return hint('Foto nota diunduh. Lampirkan dari galeri/unduhan di chat WhatsApp.');
       }
-      let copied = false;
-      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': receiptImg })]); copied = true; } catch {}
-      if (!copied) download(await receiptImg, notaFile(o));
-      openWa(o.customer_wa);
-      hint(copied
-        ? `Foto nota sudah disalin. Di chat WhatsApp tekan ${isMac ? 'Cmd' : 'Ctrl'}+V, lalu Enter.`
-        : 'Foto nota diunduh. Lampirkan dari folder Unduhan di chat WhatsApp.');
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': receiptImg })]);
+        hint(`Foto nota sudah disalin. Buka tab WhatsApp Web, pilih chat pembeli${who ? ` (${who})` : ''}, lalu tekan ${pasteKey} dan Enter.`);
+      } catch {
+        download(await receiptImg, notaFile(o));
+        hint('Foto nota diunduh. Di chat WhatsApp Web, klik lampiran (+) lalu pilih file dari folder Unduhan.');
+      }
     } catch (e) { toast(e.message, true); }
   });
 
@@ -568,7 +566,7 @@
     const d = t.dataset;
     try {
       if (d.reprint) showReceipt(orderCache.get(Number(d.reprint)));
-      else if (d.wachat) openWa(d.wachat);
+      else if (d.wachat) waContact(d.wachat);
       else if (d.done) { await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders(); }
       else if (d.editorder) startEdit(orderCache.get(Number(d.editorder)));
       else if (d.cancel) {
