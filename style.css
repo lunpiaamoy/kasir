@@ -393,5 +393,4 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 
 /* ---------- Kirim foto nota ke WA ---------- */
 .wa-row { margin-top: 8px; align-items: center; }
-.wa-mode { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .wa-hint { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--ok-tint); color: var(--ok); font-size: 14px; font-weight: 600; }
