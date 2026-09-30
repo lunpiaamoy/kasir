@@ -3,7 +3,7 @@
 // Kalau dikosongkan, aplikasi berjalan dalam MODE CONTOH (data hanya di perangkat ini).
 window.APP_CONFIG = {
   SUPABASE_URL: 'https://bqqmglgsyjbvrnhmmxgz.supabase.co',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_ANON_KEY: 'sb_publishable_8d-sd70KqAMApJtvDadzdQ_7APSQNh8',
 
   store: {
     name: 'Lunpia Amoy',
