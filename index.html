@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kasir Lunpia Amoy</title>
+<link rel="icon" href="logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar" id="topbar" hidden>
+  <div class="brand">
+    <img src="logo.jpg" alt="Lunpia Amoy">
+    <div><small>Kasir</small><b>Lunpia Amoy</b></div>
+  </div>
+  <nav class="tabs" aria-label="Menu">
+    <button class="tab" data-tab="kasir" aria-current="page">Kasir</button>
+    <button class="tab" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
+    <button class="tab" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
+    <button class="tab" data-tab="laporan">Laporan</button>
+  </nav>
+  <div class="who">
+    <span id="whoEmail"></span>
+    <button class="ghost small" id="logoutBtn">Keluar</button>
+  </div>
+</header>
+
+<div class="demo-banner" id="demoBanner" hidden>
+  <b>Mode contoh.</b> Data hanya tersimpan di perangkat ini dan belum terhubung ke database online.
+  <button class="link" id="resetDemoBtn">Kosongkan data contoh</button>
+</div>
+
+<!-- ============ Login ============ -->
+<section class="login" id="loginView" hidden>
+  <form class="login-card" id="loginForm">
+    <img src="logo.jpg" alt="Lunpia Amoy">
+    <h1>Masuk ke kasir</h1>
+    <label for="loginEmail">Email</label>
+    <input id="loginEmail" type="email" autocomplete="username" required>
+    <label for="loginPassword">Password</label>
+    <input id="loginPassword" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit" id="loginBtn">Masuk</button>
+    <p class="error" id="loginError" role="alert"></p>
+  </form>
+</section>
+
+<main id="app" hidden>
+
+  <!-- ============ Kasir ============ -->
+  <section class="view" id="view-kasir">
+    <div class="pos">
+      <div class="catalog" id="catalog"><p class="muted">Memuat produk…</p></div>
+
+      <aside class="cart" aria-label="Pesanan baru">
+        <h2>Pesanan baru</h2>
+        <div class="cart-items" id="cartItems"></div>
+
+        <div class="cart-total"><span>Total</span><b id="cartTotal">0</b></div>
+
+        <fieldset class="field-group">
+          <legend>Pembeli</legend>
+          <div class="row2">
+            <div><label for="custName">Nama</label><input id="custName" autocomplete="off"></div>
+            <div><label for="custWa">WA</label><input id="custWa" inputmode="tel" autocomplete="off"></div>
+          </div>
+        </fieldset>
+
+        <fieldset class="field-group">
+          <legend>Diambil kapan?</legend>
+          <div class="seg" role="radiogroup" id="fulfillSeg">
+            <button type="button" role="radio" data-val="langsung" aria-checked="true">Langsung</button>
+            <button type="button" role="radio" data-val="ambil" aria-checked="false">Ambil nanti</button>
+            <button type="button" role="radio" data-val="kirim" aria-checked="false">Kirim</button>
+          </div>
+          <div class="row2" id="fulfillFields" hidden>
+            <div><label for="fDate">Tanggal</label><input id="fDate" type="date"></div>
+            <div><label for="fTime">Pukul</label><input id="fTime" type="time"></div>
+          </div>
+          <div id="ongkirField" hidden>
+            <label for="ongkir">Ongkir <span class="muted">(dicatat terpisah, tidak masuk total)</span></label>
+            <input id="ongkir" inputmode="numeric" placeholder="0" autocomplete="off">
+          </div>
+        </fieldset>
+
+        <fieldset class="field-group">
+          <legend>Pembayaran</legend>
+          <div class="seg" role="radiogroup" id="paySeg">
+            <button type="button" role="radio" data-val="tunai" aria-checked="true">Tunai</button>
+            <button type="button" role="radio" data-val="qris" aria-checked="false">QRIS</button>
+          </div>
+          <div id="cashFields">
+            <label for="paid">Uang diterima</label>
+            <input id="paid" inputmode="numeric" placeholder="0" autocomplete="off">
+            <div class="quick" id="quickCash"></div>
+            <div class="change"><span>Kembalian</span><b id="changeOut">0</b></div>
+          </div>
+        </fieldset>
+
+        <button class="primary big" id="saveBtn">Simpan &amp; cetak struk</button>
+        <p class="error" id="cartError" role="alert"></p>
+      </aside>
+    </div>
+    <button class="cart-jump" id="cartJump" hidden>Lihat pesanan <span id="cartJumpCount"></span><b id="cartJumpTotal"></b></button>
+  </section>
+
+  <!-- ============ Pesanan ============ -->
+  <section class="view" id="view-pesanan" hidden>
+    <div class="view-head">
+      <h2>Akan diambil / dikirim</h2>
+      <button class="ghost small" data-refresh>Muat ulang</button>
+    </div>
+    <div id="pendingList"></div>
+
+    <div class="view-head"><h2>Transaksi terakhir</h2></div>
+    <div class="table-wrap"><table class="table" id="recentTable"></table></div>
+  </section>
+
+  <!-- ============ Stok ============ -->
+  <section class="view" id="view-stok" hidden>
+    <div class="view-head">
+      <h2>Stok produk</h2>
+      <button class="primary small" id="newProductBtn">Tambah produk</button>
+    </div>
+    <p class="stock-summary" id="stockSummary"></p>
+
+    <form class="panel" id="productForm" hidden>
+      <h3 id="productFormTitle">Tambah produk</h3>
+      <div class="row4">
+        <div><label for="pCategory">Jenis</label><input id="pCategory" list="categoryList" required placeholder="Lunpia Goreng"></div>
+        <div><label for="pName">Nama / isi</label><input id="pName" required placeholder="Udang Ayam"></div>
+        <div><label for="pPrice">Harga</label><input id="pPrice" inputmode="numeric" required placeholder="26000"></div>
+        <div><label for="pMin">Batas stok menipis</label><input id="pMin" inputmode="numeric" value="5"></div>
+      </div>
+      <datalist id="categoryList"></datalist>
+      <label class="check"><input type="checkbox" id="pActive" checked> Tampilkan di kasir</label>
+      <div class="actions">
+        <button class="primary" type="submit">Simpan produk</button>
+        <button class="ghost" type="button" id="cancelProductBtn">Batal</button>
+      </div>
+    </form>
+
+    <div class="table-wrap"><table class="table" id="stockTable"></table></div>
+  </section>
+
+  <!-- ============ Laporan ============ -->
+  <section class="view" id="view-laporan" hidden>
+    <div class="view-head">
+      <h2>Laporan penjualan</h2>
+    </div>
+    <div class="range">
+      <div class="seg compact" id="rangeSeg">
+        <button type="button" data-range="today" aria-checked="true">Hari ini</button>
+        <button type="button" data-range="yesterday" aria-checked="false">Kemarin</button>
+        <button type="button" data-range="7d" aria-checked="false">7 hari</button>
+        <button type="button" data-range="month" aria-checked="false">Bulan ini</button>
+      </div>
+      <div class="range-custom">
+        <input type="date" id="rFrom" aria-label="Dari tanggal">
+        <span>–</span>
+        <input type="date" id="rTo" aria-label="Sampai tanggal">
+        <button class="ghost small" id="rApply">Tampilkan</button>
+      </div>
+    </div>
+    <div class="metrics" id="metrics"></div>
+    <div class="report-grid">
+      <div>
+        <h3>Produk terlaris</h3>
+        <div class="table-wrap"><table class="table" id="topTable"></table></div>
+      </div>
+      <div>
+        <h3>Per hari</h3>
+        <div class="table-wrap"><table class="table" id="dailyTable"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ Struk ============ -->
+<div class="modal" id="receiptModal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+    <h2 id="receiptTitle">Struk</h2>
+    <div class="paper"><div class="receipt" id="receipt"></div></div>
+    <p class="muted hint">Di jendela Print pilih printer thermal, ukuran kertas 58 mm, margin <b>None</b>.</p>
+    <div class="actions">
+      <button class="primary" id="printBtn">Cetak</button>
+      <button class="ghost" id="closeReceiptBtn">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
