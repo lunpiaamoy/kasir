@@ -310,6 +310,7 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 .paper .receipt { padding: 3mm 2mm; width: calc(48mm + 4mm); }
 .receipt img { display: block; width: 26mm; margin: 0 auto 1mm; filter: grayscale(1) contrast(1.3); }
 .receipt .r-c { text-align: center; }
+.receipt .r-store { font-family: "Times New Roman", Times, serif; font-weight: 700; font-size: 9pt; }
 .receipt table { width: 100%; border-collapse: collapse; }
 .receipt td, .receipt th { padding: 0; vertical-align: top; font-weight: 400; }
 .receipt .r-gap { height: 3mm; }
@@ -322,7 +323,7 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 .receipt .items .r-cat td { font-weight: 700; padding-top: 1.5mm; }
 .receipt .tot td { font-weight: 700; }
 .receipt .tot td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.receipt .r-rule { border-top: 1px dashed #000; margin: 1.5mm 0; }
+.receipt .r-rule { border-top: 1px dashed #000; margin: 2mm 0; }
 
 /* ---------- Toast ---------- */
 .toast {

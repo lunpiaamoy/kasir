@@ -273,17 +273,17 @@
     const cats = groupBy(o.order_items, 'category');
     const created = new Date(o.created_at);
     const kv = rows => `<table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td>: ${v}</td></tr>`).join('')}</table>`;
-    const fulRows = o.fulfillment === 'langsung' ? '' : `<div class="r-gap"></div>` + kv([
+    const fulRows = o.fulfillment === 'langsung' ? '' : `<div class="r-rule"></div>` + kv([
       [o.fulfillment === 'kirim' ? 'KIRIM' : 'AMBIL', o.fulfill_date ? dmy(parseYmd(o.fulfill_date)) : '-'],
       ['PUKUL', hhmm(o.fulfill_time) || '-'],
       ...(o.fulfillment === 'kirim' ? [['ONGKIR', rp(o.ongkir)]] : []),
     ]);
     return `
       <img src="logo.jpg" alt="">
-      <div class="r-c">${esc(STORE.address)}<br>${esc(STORE.phone)}</div>
-      <div class="r-gap"></div>
+      <div class="r-c r-store">${esc(STORE.address)}<br>${esc(STORE.phone)}</div>
+      <div class="r-rule"></div>
       ${kv([['NAMA', esc(o.customer_name.toUpperCase() || '-')], ['WA', esc(o.customer_wa || '-')]])}
-      <div class="r-gap"></div>
+      <div class="r-rule"></div>
       <table class="items">
         <thead><tr><th>PRODUK</th><th>JML</th><th>HARGA</th><th>SUB</th></tr></thead>
         <tbody>
@@ -299,10 +299,10 @@
         <tr><td>${o.pay_method === 'qris' ? 'QRIS' : 'TUNAI'}</td><td>${rp(o.paid)}</td></tr>
         ${o.pay_method === 'tunai' ? `<tr><td>KEMBALIAN</td><td>${rp(o.change)}</td></tr>` : ''}
       </table>
-      <div class="r-gap"></div>
+      <div class="r-rule"></div>
       ${kv([['NO', notaNo(o)], ['TANGGAL', dmy(created)]])}
       ${fulRows}
-      ${o.status === 'batal' ? '<div class="r-gap"></div><div class="r-c"><b>*** DIBATALKAN ***</b></div>' : ''}
+      ${o.status === 'batal' ? '<div class="r-rule"></div><div class="r-c"><b>*** DIBATALKAN ***</b></div>' : ''}
     `;
   }
 
