@@ -28,10 +28,54 @@
     seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range) === val)));
   }
 
+  // ---------------------------------------------------------------- Sort tabel
+  // Klik judul kolom: urut naik, klik lagi: turun. Nilai diambil dari data-sort di sel kalau ada
+  // (mis. tanggal ISO), selain itu dari teksnya; angka "Rp 1.250.000" dibandingkan sebagai angka.
+  // Urutan dipertahankan saat tabel digambar ulang. Kolom tanpa judul atau data-nosort dilewati.
+  const sortState = {};
+  const cellKey = td => {
+    const raw = (td?.dataset.sort ?? td?.textContent ?? '').trim();
+    const n = raw.replace(/^Rp\s*/i, '').replace(/\./g, '').replace(/^[−–]/, '-').replace(',', '.');
+    return /^-?\d+(\.\d+)?$/.test(n) ? Number(n) : raw.toLowerCase();
+  };
+  function applySort(table) {
+    const st = sortState[table.id], ths = [...table.querySelectorAll('thead th')];
+    ths.forEach((th, i) => {
+      const on = st && st.col === i;
+      th.classList.toggle('sort-asc', on && st.dir === 1);
+      th.classList.toggle('sort-desc', on && st.dir === -1);
+      if (th.textContent.trim() && !('nosort' in th.dataset)) { th.classList.add('sortable'); th.tabIndex = 0; th.setAttribute('aria-sort', on ? (st.dir === 1 ? 'ascending' : 'descending') : 'none'); }
+    });
+    const tbody = table.tBodies[0];
+    if (!st || !tbody) return;
+    const rows = [...tbody.rows].filter(r => !r.querySelector('td.empty'));
+    rows.sort((a, b) => {
+      const x = cellKey(a.cells[st.col]), y = cellKey(b.cells[st.col]);
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'id', { numeric: true });
+      return c * st.dir;
+    });
+    rows.forEach(r => tbody.append(r));
+  }
+  function makeSortable(id) {
+    const table = $(id);
+    const toggle = th => {
+      if (!th?.classList.contains('sortable')) return;
+      const col = [...th.parentElement.children].indexOf(th), st = sortState[id];
+      sortState[id] = { col, dir: st?.col === col ? -st.dir : 1 };
+      applySort(table);
+    };
+    table.addEventListener('click', e => toggle(e.target.closest('thead th')));
+    table.addEventListener('keydown', e => { if (e.key === 'Enter') toggle(e.target.closest('thead th')); });
+    // Tabel digambar ulang lewat innerHTML → pasang lagi tanda & urutan
+    new MutationObserver(() => applySort(table)).observe(table, { childList: true });
+  }
+
   // ---------------------------------------------------------------- State
   let products = [];
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
+
+  ['recentTable', 'stockTable', 'topTable', 'dailyTable', 'cashHistory'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -464,7 +508,7 @@
         const d = new Date(o.created_at);
         return `<tr class="${o.status === 'batal' ? 'dim' : ''}">
           <td class="num">${notaNo(o)}</td>
-          <td>${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
+          <td data-sort="${esc(o.created_at)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
           <td>${esc(o.customer_name || '-')}</td>
           <td>${FUL_LABEL[o.fulfillment]}</td>
           <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
@@ -519,14 +563,14 @@
       : 'Semua stok aman.';
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
     $('stockTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Stok</th><th>Status</th><th>Tambah stok</th><th></th></tr></thead>
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Stok</th><th>Status</th><th data-nosort>Tambah stok</th><th></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
         <tr class="${p.active ? '' : 'dim'}">
           <td>${esc(p.category)}</td>
           <td><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
           <td class="num">${rp(p.price)}</td>
           <td class="num stock-num">${p.stock}</td>
-          <td>${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
+          <td data-sort="${p.stock - p.min_stock}">${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
           <td><div class="add-stock">
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
@@ -786,7 +830,7 @@
     })).filter(b => b.n).reverse();
     $('periodTitle').textContent = listUnit === 'month' ? 'Per bulan' : 'Per hari';
     $('dailyTable').innerHTML = `<thead><tr><th>${listUnit === 'month' ? 'Bulan' : 'Tanggal'}</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
-      <tbody>${rows.length ? rows.map(b => `<tr><td>${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
+      <tbody>${rows.length ? rows.map(b => `<tr><td data-sort="${esc(b.key)}">${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
   }
 
@@ -892,11 +936,11 @@
       <tbody>${days.length ? days.map(c => {
         const d = c.closed_at ? c.counted - c.expected : null;
         return `<tr>
-          <td>${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+          <td data-sort="${esc(c.day)}">${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
           <td class="num">${rp(c.opening)}</td>
           <td class="num">${c.closed_at ? rp(c.expected) : '—'}</td>
           <td class="num">${c.closed_at ? rp(c.counted) : '—'}</td>
-          <td>${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
+          <td data-sort="${d ?? ''}">${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
         </tr>`;

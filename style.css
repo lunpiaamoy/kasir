@@ -383,3 +383,10 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
   #receiptModal .paper { padding: 0; background: none; display: block; }
   #receiptModal .receipt { box-shadow: none; width: 48mm; padding: 0 0 6mm; margin: 0 auto; }
 }
+
+/* ---------- Urutkan tabel (klik judul kolom) ---------- */
+.table th.sortable { cursor: pointer; user-select: none; }
+.table th.sortable:hover { color: var(--ink); }
+.table th.sortable::after { content: "↕"; margin-left: 4px; opacity: .35; font-size: 11px; }
+.table th.sort-asc::after { content: "▲"; opacity: 1; color: var(--amoy); }
+.table th.sort-desc::after { content: "▼"; opacity: 1; color: var(--amoy); }
