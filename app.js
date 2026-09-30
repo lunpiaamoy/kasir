@@ -436,7 +436,7 @@
     const num = waNumber(o.customer_wa), text = encodeURIComponent(waText(o));
     if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
     window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${text}`, '_blank');
-    $('waHint').textContent = `Chat ${o.customer_name || 'pembeli'} dibuka di tab WhatsApp Web dengan isi nota. Tekan Enter untuk mengirim.`;
+    $('waHint').textContent = 'Chat WhatsApp pembeli sudah dibuka di tab baru dengan isi nota. Tekan Enter untuk mengirim.';
     $('waHint').hidden = false;
   });
 
