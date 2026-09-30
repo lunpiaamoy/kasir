@@ -398,17 +398,30 @@
     if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
     window.print();
   }
-  // ---- Nota ke WhatsApp sebagai foto ----
-  // Situs tidak bisa melampirkan gambar ke WhatsApp, dan tidak bisa membuka/mengarahkan tab WhatsApp Web
-  // yang sudah terbuka (WhatsApp memutus hubungan tab dengan situs lain). Jadi:
-  //  - Laptop: foto nota disalin saja, tanpa membuka tab. Kasir pindah ke tab WhatsApp Web-nya sendiri,
-  //    pilih chat pembeli, lalu Cmd/Ctrl+V dan Enter.
-  //  - HP: menu Bagikan dengan foto nota terlampir; pilih WhatsApp lalu kontak.
+  // ---- Nota ke WhatsApp sebagai teks ----
+  // Chat pembeli dibuka dengan isi nota sudah terketik; kasir tinggal tekan Enter.
+  //  - Laptop: WhatsApp Web. Situs lain tidak bisa mengarahkan ke tab WhatsApp Web yang sudah terbuka
+  //    (WhatsApp memutus hubungan tab), jadi chat selalu terbuka di tab baru.
+  //  - HP: langsung aplikasi WhatsApp.
   const waNumber = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent);
-  const pasteKey = isMac ? 'Cmd+V' : 'Ctrl+V';
-  $('waBtn').textContent = isMobile ? 'Bagikan foto nota ke WA' : 'Salin foto nota untuk WA';
+  function waText(o) {
+    const d = new Date(o.created_at);
+    const lines = [
+      `*${STORE.name}*`, `Nota ${notaNo(o)}`, `${dmy(d)} ${pad(d.getHours())}.${pad(d.getMinutes())}`, '',
+      ...o.order_items.map(i => `${i.category} ${i.name}\n  ${i.qty} x ${rp(i.price)} = ${rp(i.subtotal)}`), '',
+      `*Total: Rp ${rp(o.total)}*`,
+      o.pay_method === 'qris' ? 'Dibayar: QRIS' : `Tunai: Rp ${rp(o.paid)}${o.change ? ` · Kembalian: Rp ${rp(o.change)}` : ''}`,
+    ];
+    if (o.fulfillment !== 'langsung') {
+      lines.push('', `${o.fulfillment === 'kirim' ? 'Dikirim' : 'Diambil'}: ${o.fulfill_date ? longDate(parseYmd(o.fulfill_date)) : '-'}${o.fulfill_time ? ' pukul ' + hhmm(o.fulfill_time) : ''}`);
+      if (o.fulfillment === 'kirim' && o.ongkir) lines.push(`Ongkir: Rp ${rp(o.ongkir)}`);
+    }
+    if (o.note) lines.push(`Catatan: ${o.note}`);
+    if (o.status === 'batal') lines.push('', '*NOTA INI DIBATALKAN*');
+    lines.push('', 'Terima kasih.', `${STORE.address} · ${STORE.phone}`);
+    return lines.join('\n');
+  }
 
   // Nomor WA di kartu pesanan: HP → buka chat di aplikasi; laptop → salin nomor (untuk dicari di WhatsApp Web)
   async function waContact(phone) {
@@ -417,63 +430,20 @@
     catch { toast(`Nomor WA: ${phone}`); }
   }
 
-  let libImage;
-  const loadHtmlToImage = () => (libImage ||= new Promise((ok, fail) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js';
-    s.onload = () => ok(window.htmlToImage); s.onerror = () => { libImage = null; fail(new Error('Gagal memuat pembuat gambar. Periksa internet.')); };
-    document.head.append(s);
-  }));
-  async function receiptBlob() {
-    const lib = await loadHtmlToImage(), node = $('receipt');
-    const img = node.querySelector('img');
-    if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
-    const opt = { pixelRatio: 3, backgroundColor: '#ffffff', style: { boxShadow: 'none', margin: '0' } };
-    if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) await lib.toBlob(node, opt);   // Safari: gambar logo baru muncul di percobaan kedua
-    return lib.toBlob(node, opt);
-  }
-  let receiptImg = null;   // Promise<Blob>, disiapkan saat struk dibuka supaya tombol langsung jalan
-  const notaFile = o => `nota-${o.year}-${pad(o.seq, 5)}.png`;
-  function download(blob, name) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = name;
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
-
   let receiptOrder = null;
-  $('waBtn').addEventListener('click', async () => {
+  $('waBtn').addEventListener('click', () => {
     const o = receiptOrder; if (!o) return;
-    receiptImg ||= receiptBlob();
-    receiptImg.catch(() => (receiptImg = null));
-    const who = [o.customer_name, o.customer_wa].filter(Boolean).join(' · ');
-    const hint = m => { $('waHint').textContent = m; $('waHint').hidden = false; };
-    try {
-      if (isMobile) {
-        const file = new File([await receiptImg], notaFile(o), { type: 'image/png' });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file] }).catch(e => { if (e.name !== 'AbortError') throw e; });
-          return hint(`Pilih WhatsApp, lalu kontak pembeli${who ? ` (${who})` : ''}.`);
-        }
-        download(file, file.name);
-        return hint('Foto nota diunduh. Lampirkan dari galeri/unduhan di chat WhatsApp.');
-      }
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': receiptImg })]);
-        hint(`Foto nota sudah disalin. Buka tab WhatsApp Web, pilih chat pembeli${who ? ` (${who})` : ''}, lalu tekan ${pasteKey} dan Enter.`);
-      } catch {
-        download(await receiptImg, notaFile(o));
-        hint('Foto nota diunduh. Di chat WhatsApp Web, klik lampiran (+) lalu pilih file dari folder Unduhan.');
-      }
-    } catch (e) { toast(e.message, true); }
+    const num = waNumber(o.customer_wa), text = encodeURIComponent(waText(o));
+    if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
+    window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${text}`, '_blank');
+    $('waHint').textContent = `Chat ${o.customer_name || 'pembeli'} dibuka di tab WhatsApp Web dengan isi nota. Tekan Enter untuk mengirim.`;
+    $('waHint').hidden = false;
   });
 
   function showReceipt(order, autoPrint = false) {
     receiptOrder = order;
     $('waHint').hidden = true;
     $('receipt').innerHTML = receiptHtml(order);
-    receiptImg = null;
-    setTimeout(() => { if (receiptOrder === order) (receiptImg = receiptBlob()).catch(() => (receiptImg = null)); }, 0);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
     if (autoPrint) doPrint();
