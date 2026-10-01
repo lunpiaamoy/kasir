@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   </nav>
   <div class="who">
     <span id="whoEmail"></span>
-    <button class="ghost small" id="settingsBtn">Pengaturan</button>
+    <button class="ghost small owner-only" id="settingsBtn">Pengaturan</button>
     <button class="ghost small" id="logoutBtn">Keluar</button>
   </div>
 </header>
@@ -196,21 +196,12 @@
   <section class="view" id="view-pengaturan" hidden>
     <div class="view-head"><h2>Pengaturan</h2></div>
 
-    <section class="panel">
-      <h3>Ubah password</h3>
-      <p class="muted hint">Untuk akun yang sedang masuk: <b id="pwEmail"></b></p>
-      <form class="pw-form" id="pwForm">
-        <label>Password baru<input type="password" id="pw1" autocomplete="new-password" minlength="6" required></label>
-        <label>Ulangi password baru<input type="password" id="pw2" autocomplete="new-password" minlength="6" required></label>
-        <button class="primary" type="submit">Simpan password</button>
-      </form>
-    </section>
-
     <section class="panel owner-only">
       <h3>Staf</h3>
       <p class="muted hint">Staf baru otomatis bisa memakai kasir setelah akun login-nya dibuat di Supabase:
         <b>Authentication → Users → Add user</b> (email yang sama, centang <b>Auto Confirm User</b>).
-        Menghapus staf di sini mencabut aksesnya ke kasir.</p>
+        Menghapus staf di sini mencabut aksesnya ke kasir. Tombol <b>Password</b> mengganti password login akun tersebut
+        (termasuk akun Anda sendiri); beri tahu password barunya ke pegawai.</p>
       <div class="table-wrap"><table class="table" id="staffTable"></table></div>
     </section>
 
@@ -342,9 +333,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=27"></script>
-<script src="db.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="config.js?v=29"></script>
+<script src="db.js?v=29"></script>
+<script src="app.js?v=29"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

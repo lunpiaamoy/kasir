@@ -443,12 +443,12 @@ select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid
 .prod-edit h4 { margin: 10px 0 0; }
 .prod-edit label { margin: 0; }
 .prod-edit .short-label input { max-width: 200px; }
-.buy-head, .buy-line { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr 1fr auto; gap: 6px; align-items: center; }
+.buy-head, .buy-line { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr 1fr 76px; gap: 6px; align-items: center; }
 .buy-head { font-size: 12px; font-weight: 700; color: var(--muted); }
 .buy-line input { min-width: 0; }
 .out-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
 .out-grid label { font-size: 13px; }
-.pw-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: end; max-width: 720px; }
+.pw-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: center; }
 .pw-form label { margin: 0; }
 h3.sub { margin-top: 18px; }
 @media (max-width: 560px) {
@@ -461,3 +461,6 @@ h3.sub { margin-top: 18px; }
   .buy-line [data-b="price"] { grid-area: 3 / 1; }
   .buy-line [data-b="leftover"] { grid-area: 3 / 2; }
 }
+.buy-line.carry input[readonly] { background: var(--ground); color: var(--muted); }
+.buy-line.carry .chip { justify-self: start; white-space: nowrap; }
+@media (max-width: 560px) { .buy-line.carry .chip { grid-area: 1 / 3; } }

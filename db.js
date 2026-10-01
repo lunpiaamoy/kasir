@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 006, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 007, yang belum) di Supabase (SQL Editor → Run).';
   function fail(error) {
     if (!error) return;
     if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
@@ -155,18 +155,11 @@
       async listProductions(fromDay, toDay) {
         return all(() => sb.from('productions').select('*').gte('day', fromDay).lte('day', toDay).order('day', { ascending: false }).order('id', { ascending: false }));
       },
-      async saveProduction(x) {
-        const row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note };
-        const { error } = await (x.id ? sb.from('productions').update(row).eq('id', x.id) : sb.from('productions').insert(row)); fail(error);
-      },
-      async deleteProduction(id) { const { error } = await sb.from('productions').delete().eq('id', id); fail(error); },
-      async changePassword(password) {
-        const { error } = await sb.auth.updateUser({ password });
-        if (!error) return;
-        if (error.code === 'same_password') throw new Error('Password baru sama dengan password lama.');
-        if (error.code === 'weak_password') throw new Error('Password terlalu lemah. Pakai minimal 6 karakter (campur huruf dan angka).');
-        if (error.code === 'reauthentication_needed') throw new Error('Demi keamanan, keluar lalu masuk lagi, kemudian ulangi ubah password.');
-        throw new Error('Gagal mengubah password: ' + error.message);
+      // Lewat fungsi database (007) supaya hasil produksi ikut menambah/mengurangi stok
+      async saveProduction(x) { const { error } = await sb.rpc('save_production', { p: x }); fail(error); },
+      async deleteProduction(id) { const { error } = await sb.rpc('delete_production', { p_id: id }); fail(error); },
+      async setStaffPassword(email, password) {
+        const { error } = await sb.rpc('set_staff_password', { p_email: email, p_password: password }); fail(error);
       },
       // Pulihkan: data di file yang belum ada di database ditambahkan (006); data yang ada tidak diubah
       async restore(data) {
@@ -264,6 +257,17 @@
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch {} };
     const clone = x => JSON.parse(JSON.stringify(x));
     const jakartaYear = () => Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date()));
+    const dmyStr = d => d.split('-').reverse().join('/');
+    const demoProdStock = (db, oldOut, newOut, note) => {
+      const d = new Map();
+      newOut.forEach(o => d.set(o.product_id, (d.get(o.product_id) || 0) + o.qty));
+      oldOut.forEach(o => d.set(o.product_id, (d.get(o.product_id) || 0) - o.qty));
+      d.forEach((delta, id) => {
+        const p = db.products.find(x => x.id === id); if (!p || !delta) return;
+        p.stock += delta;
+        (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+      });
+    };
     let signedIn = true;
     let authCb = () => {};
     // HPP per pcs seperti product_cost() di database: dari resep, kalau tidak ada dari HPP manual
@@ -427,14 +431,24 @@
         return clone((load().productions || []).filter(x => x.day >= fromDay && x.day <= toDay)
           .sort((a, b) => b.day.localeCompare(a.day) || b.id - a.id));
       },
+      // Sama dengan save_production/delete_production di database: stok bertambah sebesar selisihnya
       async saveProduction(x) {
-        const db = load(), list = db.productions ||= [], row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note };
-        if (x.id) Object.assign(list.find(p => p.id === x.id), row);
+        const db = load(), list = db.productions ||= [];
+        const row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note, stocked: x.stocked !== false };
+        const old = x.id ? list.find(p => p.id === x.id) : null;
+        demoProdStock(db, old?.stocked ? old.outputs : [], row.stocked ? row.outputs : [], `Produksi ${dmyStr(row.day)}${old ? ' (diubah)' : ''}`);
+        if (old) Object.assign(old, row);
         else list.push({ id: db.nextId++, ...row, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
       },
-      async deleteProduction(id) { const db = load(); db.productions = (db.productions || []).filter(p => p.id !== id); save(); },
-      async changePassword() {},
+      async deleteProduction(id) {
+        const db = load(), old = (db.productions || []).find(p => p.id === id); if (!old) return;
+        if (old.stocked) demoProdStock(db, old.outputs, [], `Produksi ${dmyStr(old.day)} (dihapus)`);
+        db.productions = db.productions.filter(p => p.id !== id); save();
+      },
+      async setStaffPassword(email, password) {
+        if (password.length < 6) throw new Error('Password minimal 6 karakter');
+      },
       // Mode contoh: cadangan dari mode contoh menggantikan data contoh
       async restore(data) {
         if (!data || !Array.isArray(data.products) || data.nextId == null)

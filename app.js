@@ -92,8 +92,7 @@
   let appShown = false;
   async function showApp(session) {
     $('loginView').hidden = true; $('topbar').hidden = false; $('app').hidden = false;
-    myEmail = session.user?.email || '';
-    $('whoEmail').textContent = myEmail;
+    $('whoEmail').textContent = session.user?.email || '';
     if (appShown) return;
     appShown = true;
     try {
@@ -108,7 +107,7 @@
       refreshPendingCount();
     } catch (e) { toast(e.message, true); }
   }
-  let role = null, myEmail = '';
+  let role = null;
   const isOwner = () => role === 'pemilik';
 
   $('loginForm').addEventListener('submit', async e => {
@@ -985,31 +984,56 @@
   }
 
   // ---------------------------------------------------------------- Pembelian bahan & produksi (pemilik)
-  // Bahan terpakai = harga beli × (jumlah − sisa) / jumlah. Sisa tidak dihitung sebagai biaya.
+  // Bahan terpakai = harga beli × (jumlah − sisa) / jumlah. Sisa tidak dihitung sebagai biaya saat itu,
+  // tapi dibawa ke catatan berikutnya sebagai baris "sisa sebelumnya" (carry, from = id catatan asal)
+  // dengan nilainya; biayanya dihitung saat terpakai di sana. Belanja = baris yang bukan sisa sebelumnya.
   // Laba = penjualan (tanpa ongkir) − bahan terpakai di periode yang sama.
   const BAHAN = ['Kulit lunpia', 'Telur', 'Rebung', 'Ayam', 'Udang'];
   const SATUAN = ['kg', 'gr', 'lembar', 'butir', 'ikat', 'liter', 'pcs', 'bungkus'];
   const usedOf = b => Number(b.qty) > 0 ? Number(b.price) * Math.max(0, Number(b.qty) - Number(b.leftover || 0)) / Number(b.qty) : Number(b.price) || 0;
-  let productions = [], prodSales = { valid: [], total: 0 };
+  let productions = [], allProductions = [], prodSales = { valid: [], total: 0 };
+  const byNewest = (a, b) => b.day.localeCompare(a.day) || b.id - a.id;
+  // Sisa bahan dari satu catatan, bahan & satuan yang sama digabung; nilai = harga × sisa / jumlah
+  function leftoversOf(entry) {
+    const m = new Map();
+    (entry?.purchases || []).forEach(b => {
+      const left = Number(b.leftover || 0); if (!left || !Number(b.qty)) return;
+      const k = b.item.trim().toLowerCase() + '|' + b.unit;
+      const r = m.get(k) || m.set(k, { item: b.item, unit: b.unit, qty: 0, price: 0 }).get(k);
+      r.qty += left; r.price += Number(b.price) * left / Number(b.qty);
+    });
+    return [...m.values()].map(r => ({ ...r, qty: Math.round(r.qty * 1e4) / 1e4, price: Math.round(r.price) }));
+  }
+  // Catatan terbaru (selain yang sedang diubah) yang sisanya belum dibawa ke catatan lain
+  function carrySource(exceptId) {
+    const carried = new Set(allProductions.flatMap(p => (p.purchases || []).filter(b => b.carry).map(b => b.from)));
+    const last = allProductions.filter(p => p.id !== exceptId).sort(byNewest)[0];
+    return last && !carried.has(last.id) && leftoversOf(last).length ? last : null;
+  }
 
   async function renderProduction(valid, total) {
     prodSales = { valid, total };
     const [from, to] = range;
-    try { productions = await DB.listProductions(ymdLocal(from), ymdLocal(new Date(+to - 864e5))); }
-    catch (e) {
-      productions = [];
+    const fromDay = ymdLocal(from), toDay = ymdLocal(new Date(+to - 864e5));
+    try {
+      allProductions = await DB.listProductions('2000-01-01', '2999-12-31');
+      productions = allProductions.filter(p => p.day >= fromDay && p.day <= toDay).sort(byNewest);
+    } catch (e) {
+      productions = allProductions = [];
       $('prodMetrics').innerHTML = `<p class="error">${esc(e.message)}</p>`;
       ['prodOutTable', 'prodBuyTable', 'prodTable'].forEach(id => ($(id).innerHTML = ''));
       return;
     }
     const buys = productions.flatMap(p => p.purchases || []), outs = productions.flatMap(p => p.outputs || []);
-    const bought = buys.reduce((s, b) => s + Number(b.price || 0), 0);
+    const bought = buys.filter(b => !b.carry).reduce((s, b) => s + Number(b.price || 0), 0);
+    const latest = [...allProductions].sort(byNewest)[0], stockNow = leftoversOf(latest);
+    const stockValue = stockNow.reduce((s, r) => s + r.price, 0);
     const used = Math.round(buys.reduce((s, b) => s + usedOf(b), 0));
     const pcs = outs.reduce((s, o) => s + Number(o.qty || 0), 0);
     const profit = total - used;
     $('prodMetrics').innerHTML = productions.length ? `
       <div class="metric"><small>Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
-      <div class="metric"><small>Sisa bahan</small><b>Rp ${rp(bought - used)}</b><span>Tidak dihitung sebagai biaya</span></div>
+      <div class="metric"><small>Sisa bahan sekarang</small><b>Rp ${rp(stockValue)}</b><span>${stockNow.length ? esc(stockNow.map(r => `${r.item} ${dec(r.qty)} ${r.unit}`).join(', ')) : 'Tidak ada sisa'}</span></div>
       <div class="metric"><small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>${pcs ? `± Rp ${rp(Math.round(used / pcs))} per pcs` : 'Belum ada hasil produksi'}</span></div>
       <div class="metric"><small>Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>
       <div class="metric lead"><small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan Rp ${rp(total)} − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span></div>`
@@ -1029,21 +1053,22 @@
     const items = new Map();
     buys.forEach(b => {
       const k = (b.item || '').trim().toLowerCase() + '|' + (b.unit || '');
-      const r = items.get(k) || items.set(k, { item: b.item, unit: b.unit, qty: 0, leftover: 0, price: 0, used: 0 }).get(k);
-      r.qty += Number(b.qty || 0); r.leftover += Number(b.leftover || 0); r.price += Number(b.price || 0); r.used += usedOf(b);
+      const r = items.get(k) || items.set(k, { item: b.item, unit: b.unit, qty: 0, price: 0, usedQty: 0, used: 0 }).get(k);
+      if (!b.carry) { r.qty += Number(b.qty || 0); r.price += Number(b.price || 0); }
+      r.usedQty += Math.max(0, Number(b.qty || 0) - Number(b.leftover || 0)); r.used += usedOf(b);
     });
-    const buyRows = [...items.values()].sort((a, b) => b.price - a.price);
-    $('prodBuyTable').innerHTML = `<thead><tr><th>Bahan</th><th class="num">Dibeli</th><th class="num">Sisa</th><th class="num">Harga</th><th class="num">Terpakai</th></tr></thead>
+    const buyRows = [...items.values()].sort((a, b) => b.used - a.used);
+    $('prodBuyTable').innerHTML = `<thead><tr><th>Bahan</th><th class="num">Dibeli</th><th class="num">Harga</th><th class="num">Terpakai</th><th class="num">Nilai terpakai</th></tr></thead>
       <tbody>${buyRows.length ? buyRows.map(r => `<tr><td>${esc(r.item)}</td>
-        <td class="num" data-sort="${r.qty}">${dec(r.qty)} ${esc(r.unit)}</td><td class="num" data-sort="${r.leftover}">${r.leftover ? `${dec(r.leftover)} ${esc(r.unit)}` : '—'}</td>
-        <td class="num">${rp(r.price)}</td><td class="num">${rp(Math.round(r.used))}</td></tr>`).join('')
+        <td class="num" data-sort="${r.qty}">${r.qty ? `${dec(r.qty)} ${esc(r.unit)}` : '—'}</td><td class="num">${rp(r.price)}</td>
+        <td class="num" data-sort="${r.usedQty}">${dec(Math.round(r.usedQty * 1e4) / 1e4)} ${esc(r.unit)}</td><td class="num">${rp(Math.round(r.used))}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="5">—</td></tr>'}</tbody>`;
 
     $('prodTable').innerHTML = `<thead><tr><th>Tanggal</th><th>Pembelian</th><th>Hasil</th><th class="num">Bahan terpakai</th><th>Catatan</th><th></th></tr></thead>
       <tbody>${productions.length ? productions.map(p => `<tr>
         <td data-sort="${p.day}">${dmy(parseYmd(p.day))}</td>
-        <td>${esc((p.purchases || []).map(b => `${b.item} ${dec(b.qty)} ${b.unit}${Number(b.leftover) ? ` (sisa ${dec(b.leftover)})` : ''}`).join(', ')) || '—'}</td>
-        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}</td>
+        <td>${esc((p.purchases || []).map(b => `${b.carry ? 'sisa ' : ''}${b.item} ${dec(b.qty)} ${b.unit}${Number(b.leftover) ? ` (sisa ${dec(b.leftover)})` : ''}`).join(', ')) || '—'}</td>
+        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}${p.stocked && p.outputs?.length ? ' <span class="chip ok">masuk stok</span>' : ''}</td>
         <td class="num">${rp(Math.round((p.purchases || []).reduce((s, b) => s + usedOf(b), 0)))}</td>
         <td>${esc(p.note || '')}</td>
         <td><div class="add-stock"><button class="ghost small" data-prodedit="${p.id}">Ubah</button>
@@ -1052,19 +1077,29 @@
   }
 
   const prodName = p => `${p.category} ${p.name}`;
-  const buyLine = (b = {}) => `<div class="buy-line">
-    <input data-b="item" list="bahanList" value="${esc(b.item || '')}" placeholder="Bahan" aria-label="Bahan">
-    <input data-b="qty" inputmode="decimal" value="${b.qty != null ? dec(b.qty) : ''}" placeholder="Jumlah" aria-label="Jumlah dibeli">
-    <input data-b="unit" list="satuanList" value="${esc(b.unit || '')}" placeholder="Satuan" aria-label="Satuan">
-    <input data-b="price" inputmode="numeric" value="${b.price != null ? rp(b.price) : ''}" placeholder="Harga (Rp)" aria-label="Harga total">
-    <input data-b="leftover" inputmode="decimal" value="${Number(b.leftover) ? dec(b.leftover) : ''}" placeholder="Sisa" aria-label="Sisa">
-    <button type="button" class="ghost small danger" data-buydel aria-label="Hapus baris">×</button>
+  // Baris "sisa sebelumnya" (carry): bahan, jumlah, satuan, nilai terkunci; hanya sisanya yang diisi
+  const buyLine = (b = {}) => {
+    const ro = b.carry ? ' readonly' : '';
+    return `<div class="buy-line${b.carry ? ' carry' : ''}"${b.carry ? ` data-from="${b.from}" data-qty="${b.qty}" data-price="${b.price}"` : ''}>
+    <input data-b="item" list="bahanList" value="${esc(b.item || '')}" placeholder="Bahan" aria-label="Bahan"${ro}>
+    <input data-b="qty" inputmode="decimal" value="${b.qty != null ? dec(b.qty) : ''}" placeholder="Jumlah" aria-label="Jumlah dibeli"${ro}>
+    <input data-b="unit" list="satuanList" value="${esc(b.unit || '')}" placeholder="Satuan" aria-label="Satuan"${ro}>
+    <input data-b="price" inputmode="numeric" value="${b.price != null ? rp(b.price) : ''}" placeholder="Harga (Rp)" aria-label="${b.carry ? 'Nilai sisa' : 'Harga total'}"${ro}>
+    <input data-b="leftover" inputmode="decimal" value="${Number(b.leftover) ? dec(b.leftover) : ''}" placeholder="${b.carry ? 'Sisa lagi' : 'Sisa'}" aria-label="Sisa">
+    ${b.carry ? '<span class="chip plain" title="Sisa dari catatan sebelumnya. Isi Sisa kalau masih ada yang tersisa; kosongkan kalau sudah habis atau dibuang.">sisa lalu</span>'
+      : '<button type="button" class="ghost small danger" data-buydel aria-label="Hapus baris">×</button>'}
   </div>`;
+  };
   async function openProdForm(entry) {
     if (!products.length) await loadProducts();
+    // Catatan baru: sisa dari catatan terakhir ikut dibawa sebagai baris "sisa lalu"
+    const src = entry ? null : carrySource();
     const e = entry || {
-      day: ymdLocal(new Date()), note: '', outputs: [],
-      purchases: BAHAN.map(item => ({ item, unit: { 'Kulit lunpia': 'lembar', Telur: 'butir' }[item] || 'kg' })),
+      day: ymdLocal(new Date()), note: '', outputs: [], stocked: true,
+      purchases: [
+        ...leftoversOf(src).map(r => ({ ...r, carry: true, from: src.id })),
+        ...BAHAN.map(item => ({ item, unit: { 'Kulit lunpia': 'lembar', Telur: 'butir' }[item] || 'kg' })),
+      ],
     };
     const outQty = id => (e.outputs || []).find(o => o.product_id === id)?.qty ?? '';
     // produk aktif + produk nonaktif yang sudah tercatat di entri ini
@@ -1074,13 +1109,16 @@
       <b>${entry ? 'Ubah catatan' : 'Catat pembelian & produksi'}</b>
       <label class="short-label">Tanggal <input type="date" data-f="day" value="${esc(e.day)}"></label>
       <h4>Pembelian bahan</h4>
-      <p class="muted hint">Harga = total yang dibayar. Sisa = bahan yang belum terpakai (satuan sama).</p>
+      <p class="muted hint">Harga = total yang dibayar. Sisa = bahan yang belum terpakai (satuan sama), otomatis dibawa ke catatan berikutnya.
+        ${src ? `Baris <b>sisa lalu</b> adalah sisa dari catatan ${dmy(parseYmd(src.day))}: isi Sisa kalau masih ada yang tersisa, kosongkan kalau sudah habis atau dibuang (nilainya dihitung terpakai).` : ''}</p>
       <div class="buy-head"><span>Bahan</span><span>Jumlah</span><span>Satuan</span><span>Harga total</span><span>Sisa</span><span></span></div>
       <div class="buy-rows">${(e.purchases?.length ? e.purchases : [{}]).map(buyLine).join('')}</div>
       <button type="button" class="link" data-buyadd>+ Tambah bahan</button>
       <h4>Hasil produksi (pcs)</h4>
       <div class="out-grid">${list.map(p => `<label>${esc(prodName(p))}
         <input data-out="${p.id}" inputmode="numeric" value="${outQty(p.id)}" placeholder="0"></label>`).join('')}</div>
+      <label class="check"><input type="checkbox" data-f="stocked"${e.stocked !== false ? ' checked' : ''}>
+        Tambahkan hasil produksi ke stok <span class="muted">(tercatat di kartu stok)</span></label>
       <label>Catatan <input data-f="note" value="${esc(e.note || '')}" placeholder="opsional"></label>
       <p>Belanja <b data-sum="buy"></b> · bahan terpakai <b data-sum="used"></b> · hasil <b data-sum="pcs"></b></p>
       <div class="actions"><button type="button" class="primary small" data-prodsave>Simpan</button>
@@ -1096,17 +1134,20 @@
     const box = $('prodForm');
     const purchases = [...box.querySelectorAll('.buy-line')].map(l => {
       const f = k => l.querySelector(`[data-b="${k}"]`).value.trim();
+      if (l.dataset.from) return { item: f('item'), qty: Number(l.dataset.qty), unit: f('unit'), price: Number(l.dataset.price),
+        leftover: num(f('leftover')), carry: true, from: Number(l.dataset.from) };
       return { item: f('item'), qty: num(f('qty')), unit: f('unit'), price: toInt(f('price')), leftover: num(f('leftover')) };
-    }).filter(b => b.item || b.qty || b.price);
+    }).filter(b => b.carry || b.item || b.qty || b.price);
     const outputs = [...box.querySelectorAll('[data-out]')].map(i => {
       const p = byId(Number(i.dataset.out));
       return { product_id: p.id, name: prodName(p), qty: toInt(i.value) };
     }).filter(o => o.qty > 0);
-    return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(), purchases, outputs };
+    return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(),
+      stocked: box.querySelector('[data-f="stocked"]').checked, purchases, outputs };
   }
   function prodCalc() {
     const { purchases, outputs } = readProdForm(), q = k => $('prodForm').querySelector(`[data-sum="${k}"]`);
-    q('buy').textContent = 'Rp ' + rp(purchases.reduce((s, b) => s + b.price, 0));
+    q('buy').textContent = 'Rp ' + rp(purchases.filter(b => !b.carry).reduce((s, b) => s + b.price, 0));
     q('used').textContent = 'Rp ' + rp(Math.round(purchases.reduce((s, b) => s + usedOf(b), 0)));
     q('pcs').textContent = rp(outputs.reduce((s, o) => s + o.qty, 0)) + ' pcs';
   }
@@ -1125,16 +1166,19 @@
     const x = readProdForm();
     if (!x.day) return toast('Isi tanggal', true);
     if (!x.purchases.length && !x.outputs.length) return toast('Isi pembelian bahan atau hasil produksi', true);
-    const bad = x.purchases.find(p => !p.item || !p.qty || !p.price);
+    const bad = x.purchases.find(p => !p.carry && (!p.item || !p.qty || !p.price));
     if (bad) return toast(`Lengkapi bahan, jumlah, dan harga${bad.item ? ' untuk ' + bad.item : ''}`, true);
     const over = x.purchases.find(p => p.leftover > p.qty);
     if (over) return toast(`Sisa ${over.item} lebih banyak dari yang dibeli`, true);
     b.disabled = true;
     try {
       await DB.saveProduction({ id: Number($('prodForm').dataset.id) || null, ...x });
-      toast('Catatan disimpan');
+      const id = Number($('prodForm').dataset.id) || null;
+      const carriedBy = id && allProductions.find(p => (p.purchases || []).some(b => b.carry && b.from === id));
+      toast(carriedBy ? `Catatan disimpan. Sisa bahannya sudah dibawa ke catatan ${dmy(parseYmd(carriedBy.day))}; ubah juga di sana kalau sisanya berubah.`
+        : x.stocked && x.outputs.length ? 'Catatan disimpan, stok produk ikut diperbarui' : 'Catatan disimpan');
       $('prodForm').hidden = true; $('prodForm').innerHTML = '';
-      renderProduction(prodSales.valid, prodSales.total);
+      renderProduction(prodSales.valid, prodSales.total); loadProducts();
     } catch (err) { toast(err.message, true); b.disabled = false; }
   });
   $('prodTable').addEventListener('click', async e => {
@@ -1142,8 +1186,8 @@
     if (b.dataset.prodedit) return openProdForm(productions.find(p => p.id === Number(b.dataset.prodedit)));
     if (b.dataset.proddel) {
       const p = productions.find(x => x.id === Number(b.dataset.proddel));
-      if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?`)) return;
-      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); }
+      if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?${p.stocked && p.outputs?.length ? '\nStok hasil produksinya ikut dikurangi kembali.' : ''}`)) return;
+      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); loadProducts(); }
       catch (err) { toast(err.message, true); }
     }
   });
@@ -1574,25 +1618,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  function renderSettings() {
-    $('pwEmail').textContent = myEmail;
-    if (isOwner()) renderStaff();
-  }
-
-  // ---- Ubah password (semua akun)
-  $('pwForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const pw = $('pw1').value, btn = e.submitter || $('pwForm').querySelector('button');
-    if (pw.length < 6) return toast('Password minimal 6 karakter', true);
-    if (pw !== $('pw2').value) return toast('Kedua password tidak sama', true);
-    btn.disabled = true;
-    try {
-      await DB.changePassword(pw);
-      $('pwForm').reset();
-      toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : 'Password diubah. Pakai password baru saat masuk berikutnya.');
-    } catch (err) { toast(err.message, true); }
-    finally { btn.disabled = false; }
-  });
+  function renderSettings() { renderStaff(); }
 
   // ---- Staf
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
@@ -1607,6 +1633,7 @@
         <td><input data-f="name" value="${esc(st.name || '')}" aria-label="Nama"></td>
         <td>${roleSelect(st.role)}</td>
         <td><div class="add-stock"><button class="ghost small" data-staffsave>Simpan</button>
+          <button class="ghost small" data-staffpw>Password</button>
           <button class="ghost small danger" data-staffdel>Hapus</button></div></td>
       </tr>`).join('')}
       <tr class="new-row">
@@ -1620,6 +1647,28 @@
     const b = e.target.closest('button'); if (!b) return;
     const row = b.closest('tr'), f = k => row.querySelector(`[data-f="${k}"]`)?.value.trim() || '';
     try {
+      if ('staffpw' in b.dataset) {
+        $('staffTable').querySelector('.pw-row')?.remove();
+        row.insertAdjacentHTML('afterend', `<tr class="pw-row" data-email="${esc(row.dataset.email)}"><td colspan="4">
+          <div class="pw-form"><b>Password baru untuk ${esc(row.dataset.email)}</b>
+            <input type="password" data-f="pw1" autocomplete="new-password" placeholder="Password baru (min. 6 karakter)" aria-label="Password baru">
+            <input type="password" data-f="pw2" autocomplete="new-password" placeholder="Ulangi password baru" aria-label="Ulangi password baru">
+            <div class="actions"><button class="primary small" data-pwsave>Simpan password</button><button class="ghost small" data-pwcancel>Batal</button></div>
+          </div></td></tr>`);
+        row.nextElementSibling.querySelector('input').focus();
+        return;
+      }
+      if ('pwcancel' in b.dataset) return row.remove();
+      if ('pwsave' in b.dataset) {
+        const pw = row.querySelector('[data-f="pw1"]').value;
+        if (pw.length < 6) return toast('Password minimal 6 karakter', true);
+        if (pw !== row.querySelector('[data-f="pw2"]').value) return toast('Kedua password tidak sama', true);
+        b.disabled = true;
+        try { await DB.setStaffPassword(row.dataset.email, pw); }
+        finally { b.disabled = false; }
+        row.remove();
+        return toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : `Password ${row.dataset.email} diubah`);
+      }
       if ('staffadd' in b.dataset) {
         if (!f('email')) return toast('Isi email staf', true);
         await DB.saveStaff(f('email'), f('name'), f('role')); toast(`Staf ${f('email')} ditambahkan`);
