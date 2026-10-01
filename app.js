@@ -976,7 +976,18 @@
       <div class="metric"><small>Tunai</small><b>Rp ${rp(cash)}</b><span>${valid.filter(o => o.pay_method === 'tunai').length} transaksi</span></div>
       <div class="metric"><small>QRIS</small><b>Rp ${rp(qris)}</b><span>${valid.filter(o => o.pay_method === 'qris').length} transaksi</span></div>
       <div class="metric"><small>Ongkir tercatat</small><b>Rp ${rp(ongkir)}</b><span>Di luar penjualan</span></div>
-      ${canceled ? `<div class="metric"><small>Dibatalkan</small><b>${canceled}</b><span>Tidak dihitung</span></div>` : ''}`;
+      ${canceled ? `<div class="metric"><small>Dibatalkan</small><b>${canceled}</b><span>Tidak dihitung</span></div>` : ''}
+      <div class="metric need-laba" id="usedMetric"></div><div class="metric lead need-laba" id="profitMetric"></div>`;
+    // Laba = penjualan − bahan terpakai (dari tab Pembelian) di periode yang sama
+    if (can('laba')) {
+      const f = ymdLocal(from), t = ymdLocal(new Date(+to - 864e5));
+      DB.materialUsed(f, t).then(used => {
+        if (range[0] !== from) return;   // periode sudah diganti
+        const profit = total - used;
+        $('usedMetric').innerHTML = `<small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>dari catatan pembelian &amp; produksi</span>`;
+        $('profitMetric').innerHTML = `<small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span>`;
+      }).catch(e => { $('profitMetric').innerHTML = `<small>Laba</small><span class="error">${esc(e.message)}</span>`; $('usedMetric').remove(); });
+    }
 
     const top = new Map();
     valid.forEach(o => o.order_items.forEach(i => {
@@ -1072,14 +1083,13 @@
     const stockValue = stockNow.reduce((s, r) => s + r.price, 0);
     const used = Math.round(buys.reduce((s, b) => s + usedOf(b), 0));
     const pcs = outs.reduce((s, o) => s + Number(o.qty || 0), 0);
-    const total = valid.reduce((s, o) => s + o.total, 0), profit = total - used;
     $('prodMetrics').innerHTML = (productions.length ? `
       <div class="metric"><small>1. Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
       <div class="metric"><small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>${pcs ? `± Rp ${rp(Math.round(used / pcs))} per pcs` : 'Belum ada hasil produksi'}</span></div>
       <div class="metric"><small>2. Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>`
       : '<p class="muted">Belum ada catatan pembelian &amp; produksi di periode ini.</p>') + `
       <div class="metric"><small>3. Sisa bahan sekarang</small><b>Rp ${rp(stockValue)}</b><span>${stockNow.length ? `${stockNow.length} bahan` : 'Tidak ada sisa'}</span></div>
-      ${productions.length ? `<div class="metric lead need-laba"><small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan Rp ${rp(total)} − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span></div>` : ''}`;
+`;
 
     $('prodLeftTable').innerHTML = `<thead><tr><th>Bahan</th><th class="num">Sisa</th><th class="num">Nilai</th></tr></thead>
       <tbody>${stockNow.length ? stockNow.map(r => `<tr><td>${esc(r.item)}</td><td class="num" data-sort="${r.qty}">${dec(r.qty)} ${esc(r.unit)}</td><td class="num">${rp(r.price)}</td></tr>`).join('')
@@ -1727,9 +1737,10 @@
     ['kas', 'Tab Kas', 'Lihat kas hari ini & riwayat kas',
       { kas_buka: 'Isi / ubah uang awal', kas_tutup: 'Tutup kasir (hitung uang di laci)', kas_keluar: 'Catat kas keluar',
         kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar' }],
-    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris', { laporan_unduh: 'Unduh Excel (CSV)' }],
+    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
+      { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
     ['pembelian', 'Tab Pembelian', 'Lihat pembelian bahan, produksi & sisa bahan',
-      { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan', laba: 'Lihat laba' }],
+      { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan' }],
     ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
   ];
   const permRaw = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];

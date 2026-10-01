@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 009, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 010, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
@@ -20,8 +20,8 @@
     kontak: true, kontak_ubah: false, kontak_hapus: false };
   const PERM_PARENT = {};
   [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_kurang opname produk_tambah produk_ubah'],
-   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh'],
-   ['pembelian', 'pembelian_catat pembelian_hapus laba'], ['kontak', 'kontak_ubah kontak_hapus']]
+   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh laba'],
+   ['pembelian', 'pembelian_catat pembelian_hapus'], ['kontak', 'kontak_ubah kontak_hapus']]
     .forEach(([tab, keys]) => keys.split(' ').forEach(k => (PERM_PARENT[k] = tab)));
   const permsFor = (role, perms) => {
     const on = k => typeof perms?.[k] === 'boolean' ? perms[k] : PERM_DEFAULTS[k];
@@ -192,6 +192,10 @@
       // Lewat fungsi database (007) supaya hasil produksi ikut menambah/mengurangi stok
       async saveProduction(x) { const { error } = await sb.rpc('save_production', { p: x }); fail(error); },
       async deleteProduction(id) { const { error } = await sb.rpc('delete_production', { p_id: id }); fail(error); },
+      // Total bahan terpakai di rentang tanggal, untuk laba di Laporan (010)
+      async materialUsed(fromDay, toDay) {
+        const { data, error } = await sb.rpc('material_used', { p_from: fromDay, p_to: toDay }); fail(error); return Number(data) || 0;
+      },
       async setStaffPassword(email, password) {
         const { error } = await sb.rpc('set_staff_password', { p_email: email, p_password: password }); fail(error);
       },
@@ -479,6 +483,10 @@
         const db = load(), e = email.trim().toLowerCase();
         if (e === 'contoh@lunpia.local') throw new Error('Tidak bisa menghapus akun sendiri');
         db.staff = (db.staff || []).filter(x => x.email !== e); save();
+      },
+      async materialUsed(fromDay, toDay) {
+        return Math.round((load().productions || []).filter(x => x.day >= fromDay && x.day <= toDay).flatMap(x => x.purchases || [])
+          .reduce((s, b) => s + (Number(b.qty) > 0 ? Number(b.price) * Math.max(0, Number(b.qty) - Number(b.leftover || 0)) / Number(b.qty) : Number(b.price) || 0), 0));
       },
       async listProductions(fromDay, toDay) {
         return clone((load().productions || []).filter(x => x.day >= fromDay && x.day <= toDay)
