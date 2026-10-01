@@ -458,28 +458,28 @@
     ].join('\n');
   }
 
-  // Tombol WhatsApp (kontak & kartu pesanan): buka chat pembeli dengan salam pembuka sudah terketik.
+  // Link WhatsApp ke chat pembeli dengan teks sudah terketik. Dipakai sebagai link biasa (<a href>),
+  // bukan window.open, supaya tidak pernah diblokir browser (juga saat dipasang di layar utama).
   // Laptop: WhatsApp Web di tab baru; HP: aplikasi WhatsApp.
   const waGreeting = name => `Hai Kak${name ? ' ' + name : ''}.`;
-  function waContact(phone, name = '') {
-    const num = waNumber(phone), text = encodeURIComponent(waGreeting(name.trim()));
-    if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
-    window.open(`https://web.whatsapp.com/send?phone=${num}&text=${text}`, '_blank');
-  }
+  const waUrl = (phone, text) => {
+    const num = waNumber(phone), t = encodeURIComponent(text);
+    return isMobile ? `https://wa.me/${num}?text=${t}` : `https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${t}`;
+  };
+  const waLink = (phone, name, cls, label) =>
+    `<a class="${cls}" href="${esc(waUrl(phone, waGreeting((name || '').trim())))}" target="_blank" rel="noopener">${label}</a>`;
 
   let receiptOrder = null;
   $('waBtn').addEventListener('click', () => {
-    const o = receiptOrder; if (!o) return;
-    const num = waNumber(o.customer_wa), text = encodeURIComponent(waText(o));
-    if (isMobile) return void (location.href = `https://wa.me/${num}?text=${text}`);
-    window.open(`https://web.whatsapp.com/send?${num ? 'phone=' + num + '&' : ''}text=${text}`, '_blank');
-    $('waHint').textContent = 'Chat WhatsApp pembeli sudah dibuka di tab baru dengan isi nota. Tekan Enter untuk mengirim.';
+    if (isMobile) return;
+    $('waHint').textContent = 'Chat WhatsApp pembeli dibuka di tab baru dengan isi nota. Tekan Enter untuk mengirim.';
     $('waHint').hidden = false;
   });
 
   function showReceipt(order, autoPrint = false) {
     receiptOrder = order;
     $('waHint').hidden = true;
+    $('waBtn').href = waUrl(order.customer_wa, waText(order));
     $('receipt').innerHTML = receiptHtml(order);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
@@ -527,7 +527,7 @@
                 <span class="order-time">${hhmm(o.fulfill_time) || '--.--'}</span>
                 <span class="chip ${o.fulfillment === 'kirim' ? 'warn' : 'plain'}">${FUL_LABEL[o.fulfillment]}</span>
               </div>
-              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· <button class="link wa-link" data-wachat="${esc(o.customer_wa)}" data-waname="${esc(o.customer_name)}" title="Buka WhatsApp">${esc(o.customer_wa)}</button>` : ''}</div>
+              <div class="order-who">${esc(o.customer_name || '-')} ${o.customer_wa ? `· ${waLink(o.customer_wa, o.customer_name, 'wa-link', esc(o.customer_wa))}` : ''}</div>
               <div class="order-items">${esc(itemsSummary(o))}</div>
               ${o.note ? `<div class="order-note">Catatan: ${esc(o.note)}</div>` : ''}
               <div class="order-total"><span>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'} · Nota ${notaNo(o)}</span><span>${rp(o.total)}</span></div>
@@ -573,7 +573,6 @@
     const d = t.dataset;
     try {
       if (d.reprint) showReceipt(orderCache.get(Number(d.reprint)));
-      else if (d.wachat) waContact(d.wachat, d.waname);
       else if (d.done) { await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders(); }
       else if (d.editorder) startEdit(orderCache.get(Number(d.editorder)));
       else if (d.cancel) {
@@ -629,7 +628,7 @@
           <td data-sort="${esc(c.last)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
           <td><div class="add-stock">
             <button class="primary small" data-neworder="${i}">Pesan baru</button>
-            ${c.wa ? `<button class="ghost small" data-wachat="${esc(c.wa)}" data-waname="${esc(c.name)}">WhatsApp</button>` : ''}
+            ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -644,7 +643,6 @@
   $('contactSearch').addEventListener('input', filterContacts);
   $('contactTable').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.wachat) return waContact(b.dataset.wachat, b.dataset.waname);
     if (b.dataset.neworder) {
       const c = contacts[Number(b.dataset.neworder)];
       resetCart();
@@ -1233,6 +1231,22 @@
     cancelAnimationFrame(resizeRaf);
     resizeRaf = requestAnimationFrame(() => { if (currentTab === 'laporan') Object.keys(charts).forEach(drawBarChart); });
   });
+
+  // Ganti hari saat aplikasi tetap terbuka (mis. ditinggal semalaman): tanggal di Kas, "Hari ini" di
+  // Laporan, dan pengingat ikut pindah ke hari baru. Dicek tiap menit dan saat aplikasi dibuka lagi.
+  let shownDay = ymdLocal(new Date());
+  function checkNewDay() {
+    const d = ymdLocal(new Date());
+    if (d === shownDay) return;
+    shownDay = d;
+    const key = $('rangeSeg').querySelector('[aria-checked="true"]')?.dataset.range;
+    if (key) range = rangeFor(key);   // rentang tanggal pilihan sendiri tidak diubah
+    recount = editOpening = false;
+    if (role) { openTab(currentTab); refreshNotices(); }
+  }
+  setInterval(checkNewDay, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
+  window.addEventListener('focus', checkNewDay);
 
   boot();
 })();
