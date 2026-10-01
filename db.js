@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 011, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 012, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
@@ -230,10 +230,28 @@
         const { data: res, error } = await sb.rpc('restore_backup', { d: data }); fail(error); return res;
       },
       // Cadangan: semua tabel yang bisa dibaca pemilik
+      // Waktu cadangan terakhir (012). undefined = belum bisa dicek (tabel belum ada)
+      async lastBackup() {
+        const { data, error } = await sb.from('app_state').select('value, updated_at').eq('key', 'last_backup').maybeSingle();
+        if (error) return undefined;
+        return data ? data.updated_at : null;
+      },
+      async markBackup() {
+        await sb.from('app_state').upsert({ key: 'last_backup', value: { at: new Date().toISOString() }, updated_at: new Date().toISOString() });
+      },
+      // Sinkron otomatis: panggil cb(namaTabel) setiap ada perubahan dari perangkat lain (012).
+      // Hasil: fungsi untuk berhenti mendengarkan.
+      subscribe(cb, onStatus = () => {}) {
+        const ch = sb.channel('lunpia-sinkron');
+        ['orders', 'products', 'cash_days', 'cash_out', 'productions'].forEach(table =>
+          ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table)));
+        ch.subscribe(status => onStatus(status));
+        return () => { sb.removeChannel(ch); };
+      },
       async backup() {
         const out = {};
         const tables = { products: '*', orders: '*, order_items(*)', stock_moves: '*', cash_days: '*', cash_out: '*',
-          productions: '*', staff: '*', hidden_contacts: '*' };
+          productions: '*', staff: '*', hidden_contacts: '*', activity_log: '*' };
         for (const [t, cols] of Object.entries(tables)) {
           try { out[t] = await all(() => sb.from(t).select(cols)); } catch (e) { out[t] = { error: e.message }; }
         }
@@ -570,6 +588,14 @@
         return { produk: mem.products.length, nota: mem.orders.length };
       },
       async backup() { return clone(load()); },
+      async lastBackup() { return load().lastBackup || null; },
+      async markBackup() { load().lastBackup = new Date().toISOString(); save(); },
+      // Mode contoh: perubahan dari tab browser lain di perangkat yang sama
+      subscribe(cb, onStatus = () => {}) {
+        const h = e => { if (e.key === KEY) { mem = null; cb('orders'); cb('products'); cb('cash_days'); cb('productions'); } };
+        window.addEventListener('storage', h); onStatus('SUBSCRIBED');
+        return () => window.removeEventListener('storage', h);
+      },
       async addCashOut(day, amount, note) {
         const db = load(); (db.cashOut ||= []).push({ id: db.nextId++, day, amount, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() }); save();
       },
