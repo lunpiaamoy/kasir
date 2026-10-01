@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -32,6 +32,7 @@
   </nav>
   <div class="who">
     <span id="whoEmail"></span>
+    <button class="ghost small owner-only" id="settingsBtn">Pengaturan</button>
     <button class="ghost small" id="logoutBtn">Keluar</button>
   </div>
 </header>
@@ -91,7 +92,9 @@
             <div><label for="fTime">Pukul</label><input id="fTime" inputmode="numeric" placeholder="jj:mm" autocomplete="off" maxlength="5"></div>
           </div>
           <div id="ongkirField" hidden>
-            <label for="ongkir">Ongkir <span class="muted">(dicatat terpisah, tidak masuk total)</span></label>
+            <label for="custAddress">Alamat kirim</label>
+            <textarea id="custAddress" rows="2" autocomplete="off" placeholder="Jalan, nomor, patokan"></textarea>
+            <label for="ongkir">Ongkir <span class="muted">(tidak masuk total; kalau dibayar tunai ikut dihitung di kas)</span></label>
             <input id="ongkir" inputmode="numeric" placeholder="0" autocomplete="off">
           </div>
         </fieldset>
@@ -189,6 +192,38 @@
     </section>
   </section>
 
+  <!-- ============ Pengaturan (pemilik) ============ -->
+  <section class="view" id="view-pengaturan" hidden>
+    <div class="view-head"><h2>Pengaturan</h2></div>
+
+    <section class="panel">
+      <h3>Staf</h3>
+      <p class="muted hint">Staf baru otomatis bisa memakai kasir setelah akun login-nya dibuat di Supabase:
+        <b>Authentication → Users → Add user</b> (email yang sama, centang <b>Auto Confirm User</b>).
+        Menghapus staf di sini mencabut aksesnya ke kasir.</p>
+      <div class="table-wrap"><table class="table" id="staffTable"></table></div>
+    </section>
+
+    <section class="panel">
+      <h3>Bahan baku</h3>
+      <p class="muted hint">Harga per satuan, mis. Ayam per gr (Rp 80.000/kg = 80), Kulit lunpia per lembar, Telur per butir.
+        Kalau harga bahan berubah, HPP produk ikut berubah untuk penjualan berikutnya.</p>
+      <div class="table-wrap"><table class="table" id="ingredientTable"></table></div>
+    </section>
+
+    <section class="panel">
+      <h3>HPP per produk</h3>
+      <p class="muted hint">HPP (modal) per pcs dihitung dari resep. Produk tanpa resep memakai HPP manual. HPP saat terjual disimpan di nota, jadi laba nota lama tidak berubah.</p>
+      <div class="table-wrap"><table class="table" id="hppTable"></table></div>
+    </section>
+
+    <section class="panel">
+      <h3>Cadangan data</h3>
+      <p class="muted hint">Unduh semua data (produk, transaksi, stok, kas, kontak, bahan & resep) dalam satu file. Simpan di laptop atau Google Drive, mis. seminggu sekali.</p>
+      <button class="primary" id="backupBtn">Unduh cadangan data</button>
+    </section>
+  </section>
+
   <!-- ============ Laporan ============ -->
   <section class="view" id="view-laporan" hidden>
 
@@ -282,9 +317,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=23"></script>
-<script src="db.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="config.js?v=26"></script>
+<script src="db.js?v=26"></script>
+<script src="app.js?v=26"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

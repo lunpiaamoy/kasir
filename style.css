@@ -57,6 +57,7 @@ input {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
 input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
+textarea { width: 100%; font: inherit; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; }
 .check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .check input { width: auto; }
 .error { color: var(--bad); font-size: 14px; min-height: 1em; margin: 8px 0 0; }
@@ -418,3 +419,22 @@ a.wa-link { color: var(--muted); font-weight: 500; }
 .cash-edit label.grow, .cash-edit .grow { flex: 2 1 200px; }
 .cash-edit > b { flex-basis: 100%; }
 .cash-edit .actions { margin-top: 0; }
+
+/* Kas keluar */
+.cash-out { margin: 4px 0 14px; padding: 12px 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
+.cash-out h3 { margin-bottom: 8px; }
+.cash-out h3 .muted { font-weight: 400; font-size: 13px; }
+.cash-out .table-wrap { margin-bottom: 10px; }
+
+/* ---------- Pengaturan ---------- */
+select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+#view-pengaturan .panel h3 { margin-bottom: 4px; }
+#view-pengaturan .table td input, #view-pengaturan .table td select { padding: 6px 8px; }
+#view-pengaturan input.short { max-width: 140px; }
+#view-pengaturan .num-in { text-align: right; }
+.new-row td { background: var(--ground); }
+.recipe-edit { display: flex; flex-direction: column; gap: 8px; }
+.recipe-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.recipe-line select { flex: 2 1 200px; }
+.recipe-line input { flex: 1 1 120px; max-width: 160px; }
+.recipe-edit label { margin: 0; }

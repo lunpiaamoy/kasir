@@ -105,7 +105,7 @@
       },
       // Semua pembeli yang pernah dicatat (untuk daftar kontak)
       async listCustomers() {
-        return all(() => sb.from('orders').select('id, customer_name, customer_wa, total, status, created_at').order('id'));
+        return all(() => sb.from('orders').select('*').order('id'));   // '*': tetap jalan walau kolom address (005) belum ada
       },
       async markDone(id) {
         const { error } = await sb.rpc('mark_done', { p_id: id });
@@ -146,6 +146,45 @@
         let { error } = await run({ day, opening, opening_detail });
         if (error?.code === 'PGRST204') ({ error } = await run({ day, opening }));
         fail(error);
+      },
+      // ---- Pengaturan (pemilik, 005) ----
+      async listStaff() { const { data, error } = await sb.from('staff').select('*').order('role').order('email'); fail(error); return data; },
+      async saveStaff(email, name, role) { const { error } = await sb.rpc('save_staff', { p_email: email, p_name: name, p_role: role }); fail(error); },
+      async deleteStaff(email) { const { error } = await sb.rpc('delete_staff', { p_email: email }); fail(error); },
+      async listIngredients() { const { data, error } = await sb.from('ingredients').select('*').order('name'); fail(error); return data; },
+      async saveIngredient(x) {
+        const row = { name: x.name, unit: x.unit, price: x.price, updated_at: new Date().toISOString() };
+        const { error } = await (x.id ? sb.from('ingredients').update(row).eq('id', x.id) : sb.from('ingredients').insert(row)); fail(error);
+      },
+      async deleteIngredient(id) { const { error } = await sb.from('ingredients').delete().eq('id', id); fail(error); },
+      async listRecipes() { const { data, error } = await sb.from('recipes').select('*'); fail(error); return data; },
+      // Resep satu produk diganti seluruhnya; cost = HPP manual (dipakai kalau resep kosong)
+      async saveRecipe(productId, rows, cost) {
+        let r = await sb.from('recipes').delete().eq('product_id', productId); fail(r.error);
+        if (rows.length) { r = await sb.from('recipes').insert(rows.map(x => ({ product_id: productId, ...x }))); fail(r.error); }
+        r = await sb.from('products').update({ cost }).eq('id', productId); fail(r.error);
+      },
+      // Cadangan: semua tabel yang bisa dibaca pemilik
+      async backup() {
+        const out = {};
+        const tables = { products: '*', orders: '*, order_items(*)', stock_moves: '*', cash_days: '*', cash_out: '*',
+          staff: '*', ingredients: '*', recipes: '*', hidden_contacts: '*' };
+        for (const [t, cols] of Object.entries(tables)) {
+          try { out[t] = await all(() => sb.from(t).select(cols)); } catch (e) { out[t] = { error: e.message }; }
+        }
+        return out;
+      },
+
+      // Kas keluar (005): semua staf boleh mencatat, pemilik boleh menghapus
+      async listCashOut(day) {
+        const { data, error } = await sb.from('cash_out').select('*').eq('day', day).order('id'); fail(error); return data;
+      },
+      async addCashOut(day, amount, note) {
+        const { error } = await sb.from('cash_out').insert({ day, amount, note }); fail(error);
+      },
+      async deleteCashOut(id) {
+        const { data, error } = await sb.from('cash_out').delete().eq('id', id).select(); fail(error);
+        if (!data.length) throw new Error('Hanya pemilik yang bisa menghapus kas keluar.');
       },
       // Ubah / hapus kas di riwayat (pemilik; hapus butuh 004_ubah_hapus_kas_kontak.sql)
       async updateCashDay(day, f) {
@@ -219,6 +258,12 @@
     const jakartaYear = () => Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date()));
     let signedIn = true;
     let authCb = () => {};
+    // HPP per pcs seperti product_cost() di database: dari resep, kalau tidak ada dari HPP manual
+    const demoCost = (db, id) => {
+      const rows = (db.recipes || []).filter(r => r.product_id === id);
+      if (rows.length) return Math.round(rows.reduce((s, r) => s + r.qty * ((db.ingredients || []).find(i => i.id === r.ingredient_id)?.price || 0), 0));
+      return db.products.find(p => p.id === id)?.cost ?? null;
+    };
 
     return {
       demo: true,
@@ -260,7 +305,7 @@
         const items = p.items.map(it => {
           const prod = db.products.find(x => x.id === it.product_id);
           if (!prod) throw new Error('Produk tidak ditemukan');
-          return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price: prod.price, subtotal: prod.price * it.qty };
+          return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price: prod.price, subtotal: prod.price * it.qty, cost: demoCost(db, prod.id) };
         });
         const total = items.reduce((s, i) => s + i.subtotal, 0);
         const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
@@ -278,6 +323,7 @@
           total, pay_method: p.pay_method, paid, change: paid - total,
           status: ful === 'langsung' ? 'selesai' : 'menunggu',
           note: p.note || '', cancelled_at: null, cashier: 'contoh@lunpia.local',
+          address: ful === 'kirim' ? p.address || '' : '',
           order_items: items,
         };
         items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
@@ -294,7 +340,7 @@
           const prod = db.products.find(x => x.id === it.product_id);
           if (!prod) throw new Error('Produk tidak ditemukan');
           const price = oldPrice.get(prod.id) ?? prod.price;
-          return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price, subtotal: price * it.qty };
+          return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price, subtotal: price * it.qty, cost: demoCost(db, prod.id) };
         });
         const total = items.reduce((s, i) => s + i.subtotal, 0);
         const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
@@ -307,6 +353,7 @@
           fulfillment: ful, fulfill_date: p.fulfill_date || null, fulfill_time: p.fulfill_time || null,
           ongkir: ful === 'kirim' ? Number(p.ongkir) || 0 : 0,
           total, pay_method: p.pay_method, paid, change: paid - total, note: p.note || '',
+          address: ful === 'kirim' ? p.address || '' : '',
           status: ful === 'langsung' ? 'selesai' : o.fulfillment === 'langsung' ? 'menunggu' : o.status,
           edited_at: new Date().toISOString(), order_items: items,
         });
@@ -321,7 +368,7 @@
       },
       async recentOrders(limit = 30) { return clone(load().orders.slice(-limit).reverse()); },
       async listCustomers() {
-        return load().orders.map(({ id, customer_name, customer_wa, total, status, created_at }) => ({ id, customer_name, customer_wa, total, status, created_at }));
+        return clone(load().orders).map(({ order_items, ...o }) => o);
       },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id) {
@@ -353,6 +400,43 @@
         save();
       },
       async updateCashDay(day, f) { const c = load().cash?.[day]; if (c) { Object.assign(c, f); save(); } },
+      async listCashOut(day) { return clone((load().cashOut || []).filter(x => x.day === day)); },
+      async listStaff() { return clone(load().staff ||= [{ email: 'contoh@lunpia.local', name: 'Contoh', role: 'pemilik' }]); },
+      async saveStaff(email, name, role) {
+        const db = load(), list = db.staff ||= [{ email: 'contoh@lunpia.local', name: 'Contoh', role: 'pemilik' }];
+        const e = email.trim().toLowerCase(), cur = list.find(x => x.email === e);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('Email tidak valid');
+        if (cur?.role === 'pemilik' && role === 'kasir' && list.filter(x => x.role === 'pemilik').length <= 1) throw new Error('Harus ada minimal satu pemilik');
+        if (cur) Object.assign(cur, { name: name.trim(), role }); else list.push({ email: e, name: name.trim(), role });
+        save();
+      },
+      async deleteStaff(email) {
+        const db = load(), e = email.trim().toLowerCase();
+        if (e === 'contoh@lunpia.local') throw new Error('Tidak bisa menghapus akun sendiri');
+        db.staff = (db.staff || []).filter(x => x.email !== e); save();
+      },
+      async listIngredients() { return clone(load().ingredients || []).sort((a, b) => a.name.localeCompare(b.name)); },
+      async saveIngredient(x) {
+        const db = load(), list = db.ingredients ||= [];
+        if (x.id) Object.assign(list.find(i => i.id === x.id), { name: x.name, unit: x.unit, price: x.price });
+        else list.push({ id: db.nextId++, name: x.name, unit: x.unit, price: x.price });
+        save();
+      },
+      async deleteIngredient(id) {
+        const db = load(); db.ingredients = (db.ingredients || []).filter(i => i.id !== id);
+        db.recipes = (db.recipes || []).filter(r => r.ingredient_id !== id); save();
+      },
+      async listRecipes() { return clone(load().recipes || []); },
+      async saveRecipe(productId, rows, cost) {
+        const db = load();
+        db.recipes = (db.recipes || []).filter(r => r.product_id !== productId).concat(rows.map(x => ({ product_id: productId, ...x })));
+        db.products.find(p => p.id === productId).cost = cost; save();
+      },
+      async backup() { return clone(load()); },
+      async addCashOut(day, amount, note) {
+        const db = load(); (db.cashOut ||= []).push({ id: db.nextId++, day, amount, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() }); save();
+      },
+      async deleteCashOut(id) { const db = load(); db.cashOut = (db.cashOut || []).filter(x => x.id !== id); save(); },
       async deleteCashDay(day) { const db = load(); if (db.cash) { delete db.cash[day]; save(); } },
       async listHiddenContacts() { return clone(Object.entries(load().hidden || {}).map(([key, hidden_at]) => ({ key, hidden_at }))); },
       async updateContact(key, name, wa) {
