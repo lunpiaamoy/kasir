@@ -215,7 +215,7 @@
   function renderCart() {
     for (const id of [...cart.keys()]) if (!byId(id)) cart.delete(id);
     if (!cart.size) {
-      $('cartItems').innerHTML = `<div class="cart-empty">Ketuk produk di sebelah untuk menambahkan.</div>`;
+      $('cartItems').innerHTML = `<div class="cart-empty">Ketuk produk untuk menambahkan ke pesanan.</div>`;
     } else {
       $('cartItems').innerHTML = [...cart].map(([id, q]) => {
         const p = byId(id), avail = p.stock + (editing?.oldQty.get(id) || 0);
@@ -752,7 +752,7 @@
           <td><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
           <td class="num">${rp(p.price)}</td>
           <td class="num stock-num">${p.stock}</td>
-          <td data-sort="${p.stock - p.min_stock}">${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
+          <td data-sort="${p.stock - p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'} <span class="muted">min ${p.min_stock}</span></td>
           <td><div class="add-stock need-stok_ubah">
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
