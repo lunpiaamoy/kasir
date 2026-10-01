@@ -28,7 +28,11 @@ Pemilik selalu boleh semuanya. Wewenang tiap kasir diatur pemilik **per tab** di
 | Laporan | ✅ | ✅ unduh Excel · ❌ lihat laba |
 | Kontak | ✅ | ❌ ubah kontak · ❌ hapus kontak |
 
-Pengaturan (staf, wewenang, password, cadangan) khusus pemilik.
+Opsi tambahan per kasir: **wajib isi alasan saat membatalkan** (bawaan: wajib) dan **batas kas keluar per catatan** (bawaan: tanpa batas). Tersedia tombol contoh pengaturan **Kasir biasa**, **Kepala toko**, dan **Bagian produksi**.
+
+**Catatan aktivitas** (Pengaturan, hanya pemilik): batal/ubah/hapus nota (isi nota yang dihapus disimpan), pengurangan stok & stok opname, produk baru & perubahan harga, perubahan kas yang sudah ditutup, dan ubah/hapus kas keluar dicatat otomatis oleh database beserta siapa dan kapan.
+
+Pengaturan (staf, wewenang, password, cadangan, catatan aktivitas) khusus pemilik.
 
 Batasan ini dipasang di database, bukan hanya dengan menyembunyikan tombol (kecuali membuka tab Pesanan/Stok/Laporan/Kontak, unduh Excel, dan lihat laba, yang diatur di aplikasi).
 
@@ -44,7 +48,7 @@ Kalau `config.js` belum diisi, aplikasi berjalan dalam **mode contoh**: data han
    ```sql
    insert into public.staff (email, name) values ('email-kamu@gmail.com', 'Nama');
    ```
-4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql), [`supabase/004_ubah_hapus_kas_kontak.sql`](supabase/004_ubah_hapus_kas_kontak.sql), [`supabase/005_alamat_kas_keluar_staf_hpp.sql`](supabase/005_alamat_kas_keluar_staf_hpp.sql), [`supabase/006_pembelian_produksi.sql`](supabase/006_pembelian_produksi.sql), [`supabase/007_produksi_ke_stok.sql`](supabase/007_produksi_ke_stok.sql), [`supabase/008_wewenang_staf.sql`](supabase/008_wewenang_staf.sql), [`supabase/009_wewenang_detail_nomor_nota.sql`](supabase/009_wewenang_detail_nomor_nota.sql), dan [`supabase/010_laba_di_laporan.sql`](supabase/010_laba_di_laporan.sql), dengan cara yang sama (kosongkan editor, tempel seluruh isi file, pastikan tidak ada teks yang terpilih, lalu Run). Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
+4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql), [`supabase/004_ubah_hapus_kas_kontak.sql`](supabase/004_ubah_hapus_kas_kontak.sql), [`supabase/005_alamat_kas_keluar_staf_hpp.sql`](supabase/005_alamat_kas_keluar_staf_hpp.sql), [`supabase/006_pembelian_produksi.sql`](supabase/006_pembelian_produksi.sql), [`supabase/007_produksi_ke_stok.sql`](supabase/007_produksi_ke_stok.sql), [`supabase/008_wewenang_staf.sql`](supabase/008_wewenang_staf.sql), [`supabase/009_wewenang_detail_nomor_nota.sql`](supabase/009_wewenang_detail_nomor_nota.sql), [`supabase/010_laba_di_laporan.sql`](supabase/010_laba_di_laporan.sql), dan [`supabase/011_aktivitas_alasan_batas.sql`](supabase/011_aktivitas_alasan_batas.sql), dengan cara yang sama (kosongkan editor, tempel seluruh isi file, pastikan tidak ada teks yang terpilih, lalu Run). Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
 5. Buat akun login untuk setiap staf di **Authentication → Users → Add user → Create new user**, dengan email yang sama dan centang **Auto Confirm User**.
 6. Matikan pendaftaran umum di **Authentication → Sign In / Providers**: nonaktifkan **Allow new users to sign up**. Kalau tersedia di paket Anda, nyalakan juga **Leaked password protection**.
 7. Salin **Project URL** dan **anon / publishable key** dari **Project Settings → API** ke `config.js`.

@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 </head>
 <body>
 
@@ -213,6 +213,18 @@
     </section>
 
     <section class="panel owner-only">
+      <div class="view-head"><h3>Catatan aktivitas</h3>
+        <div class="seg compact" id="logSeg">
+          <button type="button" data-days="7" aria-checked="true">7 hari</button>
+          <button type="button" data-days="30" aria-checked="false">30 hari</button>
+          <button type="button" data-days="365" aria-checked="false">1 tahun</button>
+        </div></div>
+      <p class="muted hint">Dicatat otomatis oleh database dan tidak bisa diubah: batal, ubah, dan hapus nota (isi nota yang dihapus disimpan),
+        pengurangan stok & stok opname, produk baru & perubahan harga, perubahan kas yang sudah ditutup, serta ubah/hapus kas keluar.</p>
+      <div class="table-wrap"><table class="table" id="logTable"></table></div>
+    </section>
+
+    <section class="panel owner-only">
       <h3>Cadangan data</h3>
       <p class="muted hint">Unduh semua data (produk, transaksi, stok, kas, kontak, pembelian &amp; produksi) dalam satu file. Simpan di laptop atau Google Drive, mis. seminggu sekali.</p>
       <button class="primary" id="backupBtn">Unduh cadangan data</button>
@@ -361,9 +373,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=34"></script>
-<script src="db.js?v=34"></script>
-<script src="app.js?v=34"></script>
+<script src="config.js?v=35"></script>
+<script src="db.js?v=35"></script>
+<script src="app.js?v=35"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

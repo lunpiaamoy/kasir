@@ -75,7 +75,7 @@
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
-  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodLeftTable', 'prodTable'].forEach(makeSortable);
+  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodLeftTable', 'prodTable', 'logTable'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -99,6 +99,7 @@
       role = await DB.myRole();
       document.body.classList.toggle('is-owner', role === 'pemilik');
       perms = role ? await DB.myPerms(role) : {};
+      opts = role ? await DB.myOptions().catch(() => opts) : opts;
       applyPerms();
       $('whoEmail').textContent = `${session.user?.email || ''}${role ? ' · ' + (role === 'pemilik' ? 'Pemilik' : 'Kasir') : ''}`;
       if (!role) {
@@ -109,7 +110,7 @@
       refreshPendingCount();
     } catch (e) { toast(e.message, true); }
   }
-  let role = null, perms = {};
+  let role = null, perms = {}, opts = { cash_out_max: 0, cancel_reason_required: false };
   const isOwner = () => role === 'pemilik';
   // Wewenang per staf (diatur pemilik di Pengaturan → Staf). Elemen dengan kelas need-<wewenang>
   // disembunyikan kalau akun tidak punya wewenang itu; database juga menolaknya.
@@ -602,7 +603,7 @@
           <td>${FUL_LABEL[o.fulfillment]}</td>
           <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
           <td class="num">${rp(o.total)}</td>
-          <td>${statusChip(o.status)}</td>
+          <td>${statusChip(o.status)}${o.cancel_reason ? `<div class="muted cancel-reason">${esc(o.cancel_reason)}</div>` : ''}</td>
           <td><div class="add-stock" data-actions>
             <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
             ${o.status === 'batal' ? '' : `<button class="ghost small need-ubah_nota" data-editorder="${o.id}">Ubah</button>`}
@@ -622,10 +623,15 @@
       else if (d.cancel) {
         const box = t.closest('[data-actions]');
         box.innerHTML = `<div class="confirm">Batalkan pesanan ini? Stok akan dikembalikan.
+          <input data-reason placeholder="Alasan pembatalan${opts.cancel_reason_required ? ' (wajib)' : ''}" aria-label="Alasan pembatalan" autocomplete="off">
           <div class="actions"><button class="primary small" data-cancelyes="${d.cancel}">Ya, batalkan</button>
           <button class="ghost small" data-refresh-orders>Tidak</button></div></div>`;
       }
-      else if (d.cancelyes) { await DB.cancelOrder(Number(d.cancelyes)); toast('Pesanan dibatalkan, stok dikembalikan'); renderOrders(); loadProducts(); }
+      else if (d.cancelyes) {
+        const reason = t.closest('.confirm').querySelector('[data-reason]').value.trim();
+        if (!reason && opts.cancel_reason_required) return toast('Isi alasan pembatalan', true);
+        await DB.cancelOrder(Number(d.cancelyes), reason); toast('Pesanan dibatalkan, stok dikembalikan'); renderOrders(); loadProducts();
+      }
       else if (d.del) {
         const o = orderCache.get(Number(d.del));
         t.closest('[data-actions]').innerHTML = `<div class="confirm">Hapus nota ${notaNo(o)} secara permanen?
@@ -1294,6 +1300,7 @@
         <div><label for="outAmount">Jumlah</label><input id="outAmount" inputmode="numeric" placeholder="0" autocomplete="off"></div>
         <div class="grow"><label for="outNote">Keterangan</label><input id="outNote" placeholder="mis. beli rebung" autocomplete="off"></div>
         <button class="ghost" data-cashout-add>Catat kas keluar</button>
+        ${opts.cash_out_max ? `<span class="muted cash-max">Maks. Rp ${rp(opts.cash_out_max)} per catatan</span>` : ''}
       </div>`}
     </section>`;
   }
@@ -1528,6 +1535,8 @@
         const amount = toInt($('outAmount').value), note = $('outNote').value.trim();
         if (!amount) return toast('Isi jumlah kas keluar', true);
         if (!note) return toast('Isi keterangan kas keluar', true);
+        if (opts.cash_out_max && amount > opts.cash_out_max)
+          return toast(`Kas keluar maksimal Rp ${rp(opts.cash_out_max)} per catatan. Lebih dari itu minta pemilik yang mencatat.`, true);
         await DB.addCashOut(day, amount, note);
         $('outAmount').value = ''; $('outNote').value = '';
         toast(`Kas keluar Rp ${rp(amount)} dicatat`); refreshCashFigures(true);
@@ -1721,7 +1730,45 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  function renderSettings() { renderStaff(); }
+  function renderSettings() { renderStaff(); renderLog(); }
+
+  // ---- Catatan aktivitas (pemilik)
+  let logDays = 7;
+  $('logSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-days]'); if (!b) return;
+    logDays = Number(b.dataset.days); setSeg($('logSeg'), b.dataset.days); renderLog();
+  });
+  const payTxt = m => m === 'qris' ? 'QRIS' : 'Tunai';
+  function logText(x) {
+    const d = x.detail || {}, a = d.sebelum || {}, b = d.sesudah || {};
+    const chg = (label, k, f = v => v) => a[k] !== b[k] ? `${label} ${esc(f(a[k]))} → ${esc(f(b[k]))}` : '';
+    switch (x.action) {
+      case 'batal_nota': return ['Batalkan nota ' + x.ref, `Rp ${rp(d.total)} · ${payTxt(d.pay_method)}${d.customer ? ' · ' + esc(d.customer) : ''} · alasan: ${esc(d.alasan || '-')}`];
+      case 'ubah_nota': return ['Ubah nota ' + x.ref, [chg('nomor', 'nota'), chg('total', 'total', v => 'Rp ' + rp(v)), chg('bayar', 'pay_method', payTxt),
+        chg('pembeli', 'customer')].filter(Boolean).join(' · ') || 'isi/jadwal pesanan'];
+      case 'hapus_nota': return ['Hapus nota ' + x.ref, `Rp ${rp(d.total)} · ${payTxt(d.pay_method)}${d.customer_name ? ' · ' + esc(d.customer_name) : ''} · ${
+        esc((d.order_items || []).map(i => `${i.name} ×${i.qty}`).join(', '))}${d.status === 'batal' ? ' (sudah batal)' : ''}`];
+      case 'stok': return ['Stok ' + esc(x.ref), `${d.delta > 0 ? '+' : ''}${d.delta} · ${esc(d.note || '')}`];
+      case 'produk': return [d.baru ? 'Produk baru' : 'Ubah produk', d.baru ? `${esc(x.ref)} · Rp ${rp(d.price)}`
+        : [chg('nama', 'name'), chg('harga', 'price', v => 'Rp ' + rp(v)), a.active !== b.active ? (b.active ? 'ditampilkan' : 'disembunyikan') : ''].filter(Boolean).join(' · ') || esc(x.ref)];
+      case 'ubah_kas': return ['Ubah kas ' + dmy(parseYmd(x.ref)), [chg('uang awal', 'opening', v => 'Rp ' + rp(v)), chg('dihitung', 'counted', v => v == null ? '-' : 'Rp ' + rp(v)),
+        chg('catatan', 'note'), b.ditutup === false ? 'kas dibuka ulang' : ''].filter(Boolean).join(' · ')];
+      case 'hapus_kas': return ['Hapus kas ' + dmy(parseYmd(x.ref)), `uang awal Rp ${rp(d.opening)}${d.counted != null ? ` · dihitung Rp ${rp(d.counted)}` : ''}`];
+      case 'kas_keluar': return [(d.hapus ? 'Hapus kas keluar ' : 'Ubah kas keluar ') + dmy(parseYmd(x.ref)),
+        d.hapus ? `Rp ${rp(d.amount)} · ${esc(d.note || '')} · dicatat oleh ${esc((d.by || '').split('@')[0])}` : `Rp ${rp(d.sebelum)} → Rp ${rp(d.sesudah)} · ${esc(d.note || '')}`];
+      default: return [esc(x.action), esc(JSON.stringify(d))];
+    }
+  }
+  async function renderLog() {
+    let list;
+    try { list = await DB.listActivity(new Date(Date.now() - logDays * 864e5).toISOString()); }
+    catch (e) { $('logTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
+    $('logTable').innerHTML = `<thead><tr><th>Waktu</th><th>Oleh</th><th>Kegiatan</th><th>Keterangan</th></tr></thead><tbody>
+      ${list.length ? list.map(x => { const t = new Date(x.at), [what, info] = logText(x); return `<tr class="log-${esc(x.action)}">
+        <td data-sort="${esc(x.at)}">${pad(t.getDate())}/${pad(t.getMonth() + 1)} ${pad(t.getHours())}.${pad(t.getMinutes())}</td>
+        <td>${esc((x.actor || '').split('@')[0])}</td><td><b>${what}</b></td><td>${info}</td></tr>`; }).join('')
+        : '<tr><td class="empty" colspan="4">Tidak ada aktivitas di periode ini.</td></tr>'}</tbody>`;
+  }
 
   // ---- Staf
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
@@ -1744,6 +1791,19 @@
     ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
 
   ];
+  // Contoh pengaturan (bisa diubah lagi sebelum disimpan)
+  const PERM_PRESETS = {
+    kasir: { label: 'Kasir biasa', desc: 'Melayani pembeli, buka & tutup kas. Tidak bisa batal/ubah/hapus nota, kurangi stok, atau melihat omzet.',
+      reason: true, cashmax: 100000,
+      perms: { pesanan: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, stok: 1, kontak: 1 } },
+    kepala: { label: 'Kepala toko', desc: 'Seperti kasir, ditambah batal & ubah nota, stok masuk & opname, produksi, laporan, ubah kontak.',
+      reason: true, cashmax: 0,
+      perms: { pesanan: 1, batal: 1, ubah_nota: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, pembelian: 1, pembelian_catat: 1,
+               stok: 1, stok_masuk: 1, opname: 1, laporan: 1, kontak: 1, kontak_ubah: 1 } },
+    produksi: { label: 'Bagian produksi', desc: 'Hanya mencatat pembelian bahan & hasil produksi, dan melihat stok.',
+      reason: true, cashmax: 0,
+      perms: { pembelian: 1, pembelian_catat: 1, stok: 1 } },
+  };
   const permRaw = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
   const permOf = (st, k) => permRaw(st, k) && permRaw(st, DB.permParent[k] || k);
   let staffList = [];
@@ -1756,7 +1816,7 @@
         <td><input data-f="name" value="${esc(st.name || '')}" aria-label="Nama"></td>
         <td>${roleSelect(st.role)}
           <div class="muted perm-sum">${st.role === 'pemilik' ? 'Semua wewenang'
-            : `${Object.keys(DB.permDefaults).filter(k => permOf(st, k)).length} dari ${Object.keys(DB.permDefaults).length} wewenang`}</div></td>
+            : `${Object.keys(DB.permDefaults).filter(k => permOf(st, k)).length} dari ${Object.keys(DB.permDefaults).length} wewenang${st.cash_out_max ? ` · kas keluar maks ${rp(st.cash_out_max)}` : ''}`}</div></td>
         <td><div class="add-stock"><button class="ghost small" data-staffsave>Simpan</button>
           ${st.role === 'pemilik' ? '' : '<button class="ghost small" data-staffperm>Wewenang</button>'}
           <button class="ghost small" data-staffpw>Password</button>
@@ -1770,12 +1830,19 @@
       </tr></tbody>`;
   }
   // Tab tidak dicentang → pilihan di dalamnya mati
+  $('staffTable').addEventListener('input', e => {
+    if (e.target.dataset.opt === 'cashmax') { const v = toInt(e.target.value); e.target.value = v ? rp(v) : ''; }
+  });
   $('staffTable').addEventListener('change', e => {
     const fs = e.target.closest('[data-tabperm]');
     if (!fs || e.target.dataset.perm !== fs.dataset.tabperm) return;
-    fs.querySelectorAll('.sub input').forEach(i => { i.disabled = !e.target.checked; if (!e.target.checked) i.checked = false; });
-    fs.classList.toggle('off', !e.target.checked);
+    setTabPerm(fs, e.target.checked, true);
   });
+  // Tab boleh/tidak → pilihan di dalamnya aktif/mati (clear: kosongkan centang pilihan saat tab dimatikan)
+  function setTabPerm(fs, on, clear) {
+    fs.querySelectorAll('.sub input').forEach(i => { i.disabled = !on; if (!on && clear && i.dataset.perm) i.checked = false; });
+    fs.classList.toggle('off', !on);
+  }
   $('staffTable').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
     const row = b.closest('tr'), f = k => row.querySelector(`[data-f="${k}"]`)?.value.trim() || '';
@@ -1798,23 +1865,39 @@
         row.insertAdjacentHTML('afterend', `<tr class="perm-row" data-email="${esc(st.email)}"><td colspan="4">
           <div class="perm-edit"><b>Wewenang ${esc(st.name || st.email)}</b>
             <p class="muted hint">Centang tab yang boleh dibuka, lalu pilih apa saja yang boleh dilakukan di tab itu. Yang tidak dicentang disembunyikan dari akun ini.</p>
+            <div class="perm-presets"><span class="muted">Contoh pengaturan:</span>
+              ${Object.entries(PERM_PRESETS).map(([k, pr]) => `<button class="ghost small" data-preset="${k}" title="${esc(pr.desc)}">${pr.label}</button>`).join('')}</div>
             <div class="perm-groups">
               <fieldset><legend>Tab Kasir</legend><p class="muted perm-always">Selalu boleh: transaksi, cetak struk, kirim nota WA.</p></fieldset>
               ${PERM_TABS.map(([tab, title, desc, items]) => `<fieldset data-tabperm="${tab}">
                 <legend><label class="check"><input type="checkbox" data-perm="${tab}"${permRaw(st, tab) ? ' checked' : ''}> ${title}</label></legend>
                 <p class="muted perm-desc">${desc}</p>
-                ${Object.entries(items).map(([k, label]) => `<label class="check sub"><input type="checkbox" data-perm="${k}"${permOf(st, k) ? ' checked' : ''}${permRaw(st, tab) ? '' : ' disabled'}> ${label}</label>`).join('')}
+                ${Object.entries(items).map(([k, label]) => `<label class="check sub"><input type="checkbox" data-perm="${k}"${permOf(st, k) ? ' checked' : ''}${permRaw(st, tab) ? '' : ' disabled'}> ${label}</label>
+                  ${k === 'batal' ? `<label class="check sub opt"><input type="checkbox" data-opt="reason"${st.cancel_reason_required ?? true ? ' checked' : ''}${permRaw(st, tab) ? '' : ' disabled'}> Wajib isi alasan saat membatalkan</label>` : ''}
+                  ${k === 'kas_keluar' ? `<label class="sub opt cashmax">Batas per catatan (Rp)
+                    <input data-opt="cashmax" inputmode="numeric" value="${st.cash_out_max ? rp(st.cash_out_max) : ''}" placeholder="tanpa batas"${permRaw(st, tab) ? '' : ' disabled'}></label>` : ''}`).join('')}
               </fieldset>`).join('')}
             </div>
+            <p class="muted perm-note">Semua pembatalan, ubah/hapus nota, pengurangan stok, perubahan produk & harga, serta perubahan kas lama tercatat di <b>Catatan aktivitas</b> (bawah halaman ini).</p>
             <div class="actions"><button class="primary small" data-permsave>Simpan wewenang</button><button class="ghost small" data-permcancel>Batal</button></div>
           </div></td></tr>`);
         return;
       }
       if ('permcancel' in b.dataset) return row.remove();
+      if (b.dataset.preset) {
+        const pr = PERM_PRESETS[b.dataset.preset];
+        row.querySelectorAll('[data-perm]').forEach(i => { i.checked = !!pr.perms[i.dataset.perm]; });
+        row.querySelector('[data-opt="reason"]').checked = pr.reason;
+        row.querySelector('[data-opt="cashmax"]').value = pr.cashmax ? rp(pr.cashmax) : '';
+        row.querySelectorAll('[data-tabperm]').forEach(fs => setTabPerm(fs, fs.querySelector(`[data-perm="${fs.dataset.tabperm}"]`).checked, false));
+        return toast(`Contoh "${pr.label}" dipasang. Periksa lalu tekan Simpan wewenang.`);
+      }
       if ('permsave' in b.dataset) {
         const p = Object.fromEntries([...row.querySelectorAll('[data-perm]')].map(i => [i.dataset.perm, i.checked]));
+        const o = { cancel_reason_required: row.querySelector('[data-opt="reason"]').checked,
+                    cash_out_max: toInt(row.querySelector('[data-opt="cashmax"]').value) };
         b.disabled = true;
-        try { await DB.setStaffPerms(row.dataset.email, p); } finally { b.disabled = false; }
+        try { await DB.setStaffPerms(row.dataset.email, p, o); } finally { b.disabled = false; }
         toast(`Wewenang ${row.dataset.email} disimpan. Berlaku setelah akun itu memuat ulang halaman.`);
         return renderStaff();
       }

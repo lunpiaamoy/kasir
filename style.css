@@ -505,3 +505,23 @@ h3.sub { margin-top: 18px; }
 .seq-edit label { margin: 0; font-weight: 700; }
 .seq-edit input { width: 110px; font-variant-numeric: tabular-nums; }
 .seq-edit .muted { font-size: 13px; }
+.perm-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.perm-groups .opt { padding-left: 48px; font-size: 13px; }
+.perm-groups .cashmax { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 500; }
+.perm-groups .cashmax input { width: 120px; }
+.perm-note { font-size: 13px; margin: 0; }
+.cash-max { font-size: 13px; align-self: center; }
+.cancel-reason { font-size: 12px; margin-top: 2px; }
+.confirm [data-reason] { margin: 6px 0; }
+#logTable td:first-child { white-space: nowrap; }
+.log-hapus_nota td:nth-child(3), .log-hapus_kas td:nth-child(3) { color: var(--bad); }
+.perm-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.perm-groups .opt { padding-left: 48px; font-size: 13px; }
+.perm-groups .cashmax { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 500; }
+.perm-groups .cashmax input { width: 120px; }
+.perm-note { font-size: 13px; margin: 0; }
+.cash-max { font-size: 13px; align-self: center; }
+.cancel-reason { font-size: 12px; margin-top: 2px; }
+.confirm [data-reason] { margin: 6px 0; }
+#logTable td:first-child { white-space: nowrap; }
+.log-hapus_nota td:nth-child(3), .log-hapus_kas td:nth-child(3) { color: var(--bad); }
