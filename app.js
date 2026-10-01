@@ -972,13 +972,14 @@
     let c;
     try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = `<p class="error">${esc(e.message)}</p>`; return; }
     const { cd, cash, n } = c;
+    const resetLink = isOwner() ? '<p class="cash-reset"><button class="link danger" data-cash-reset>Mulai ulang kas hari ini</button></p>' : '';
     const head = `<div class="view-head"><h2 id="cashTitle">Kas hari ini</h2><span class="muted">${esc(longDate(new Date()))}</span></div>`;
     if (!cd || editOpening) {
       $('cashPanel').innerHTML = `${head}
         <p class="muted">Hitung uang di laci saat toko buka: isi jumlah lembar/keping tiap pecahan.</p>
         ${denomGrid('open', cd?.opening_detail)}
         <div class="actions"><button class="primary" data-cash-open>Simpan uang awal</button>
-        ${editOpening ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}</div>`;
+        ${editOpening ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}</div>${cd ? resetLink : ''}`;
       return;
     }
     const expected = cashExpected = cd.opening + cash;
@@ -994,7 +995,7 @@
       $('cashPanel').innerHTML = `${head}${figures}
         ${cd.counted_detail ? `<p class="muted">Rincian hitungan: ${esc(denomSummary(cd.counted_detail))}</p>` : ''}
         <p class="muted">Kasir ditutup pukul ${pad(t.getHours())}.${pad(t.getMinutes())} oleh ${esc((cd.closed_by || '').split('@')[0])}${cd.note ? ' · ' + esc(cd.note) : ''}
-        ${isOwner() ? ' · <button class="link" data-cash-recount>Hitung ulang</button>' : ''}</p>`;
+        ${isOwner() ? ' · <button class="link" data-cash-recount>Hitung ulang</button>' : ''}</p>${resetLink}`;
       return;
     }
     $('cashPanel').innerHTML = `${head}${figures}
@@ -1005,7 +1006,7 @@
         <div class="grow"><label for="cashNote">Catatan</label><input id="cashNote" autocomplete="off" value="${recount ? esc(cd.note || '') : ''}"></div>
         <button class="primary" data-cash-close>Tutup kasir</button>
         ${recount ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}
-      </div>`;
+      </div>${resetLink}`;
     updateDenoms('count');
   }
   // Subtotal, total, dan selisih ikut berubah saat jumlah lembar diisi
@@ -1063,6 +1064,12 @@
       } else if ('cashRecount' in t.dataset) { recount = true; renderCash(); }
       else if ('cashEditopen' in t.dataset) { editOpening = true; renderCash(); }
       else if ('cashCancel' in t.dataset) { recount = editOpening = false; renderCash(); }
+      else if ('cashReset' in t.dataset) {
+        if (!confirm('Mulai ulang kas hari ini? Uang awal, hitungan, catatan, dan status tutup kasir hari ini dikosongkan. Data penjualan tidak berubah.')) return;
+        await DB.resetCash(day);
+        recount = false; editOpening = true;
+        toast('Kas hari ini dimulai ulang. Isi uang awal.'); renderCash(); refreshNotices();
+      }
     } catch (err) { toast(err.message, true); }
   });
 
