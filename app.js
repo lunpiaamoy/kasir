@@ -108,6 +108,7 @@
       }
       await loadProducts();
       refreshPendingCount();
+      startSync();
     } catch (e) { toast(e.message, true); }
   }
   let role = null, perms = {}, opts = { cash_out_max: 0, cancel_reason_required: false };
@@ -133,6 +134,7 @@
     finally { $('loginBtn').disabled = false; }
   });
   $('logoutBtn').addEventListener('click', async () => {
+    stopSync?.(); stopSync = null;
     await DB.signOut(); appShown = false; role = null; perms = {}; document.body.classList.remove('is-owner');
     document.body.className = document.body.className.replace(/\bcan-\S+/g, '').trim();
     resetCart(); showLogin();
@@ -1568,9 +1570,20 @@
     if (cd === null && can('kas_buka')) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
     if (late && can('pesanan')) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     if ((nToday || nTomorrow) && can('pesanan')) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
+    // Pengingat cadangan (pemilik): belum pernah, atau lebih dari 7 hari
+    if (isOwner()) {
+      const last = await DB.lastBackup().catch(() => undefined);
+      const days = last ? Math.floor((Date.now() - new Date(last)) / 864e5) : null;
+      if (last === null || days > 7) items.push(`<div class="notice warn">${last === null ? '<b>Belum pernah mengunduh cadangan data.</b>'
+        : `<b>Cadangan data terakhir ${days} hari lalu.</b>`} Simpan cadangan seminggu sekali supaya data aman.
+        <button class="link" data-backup-now>Unduh cadangan sekarang</button></div>`);
+    }
     $('kasirNotices').innerHTML = items.join('');
   }
-  $('kasirNotices').addEventListener('click', e => { const b = e.target.closest('[data-goto]'); if (b) openTab(b.dataset.goto); });
+  $('kasirNotices').addEventListener('click', e => {
+    const b = e.target.closest('[data-goto]'); if (b) openTab(b.dataset.goto);
+    if (e.target.closest('[data-backup-now]')) downloadBackup();
+  });
 
   // ---------------------------------------------------------------- Export
   // CSV dengan pemisah titik koma + BOM supaya langsung rapi dibuka di Excel berbahasa Indonesia.
@@ -1925,16 +1938,19 @@
   });
 
   // ---- Cadangan
-  $('backupBtn').addEventListener('click', async () => {
+  async function downloadBackup() {
     $('backupBtn').disabled = true;
     try {
       const data = await DB.backup();
       const json = JSON.stringify({ aplikasi: 'Kasir Lunpia Amoy', dibuat: new Date().toISOString(), data }, null, 1);
       saveFile(new Blob([json], { type: 'application/json' }), `cadangan-lunpia-amoy-${ymdLocal(new Date())}.json`);
-      toast('Cadangan data diunduh');
+      await DB.markBackup().catch(() => {});
+      toast('Cadangan data diunduh. Simpan file ini di laptop atau Google Drive.');
+      refreshNotices();
     } catch (err) { toast(err.message, true); }
     finally { $('backupBtn').disabled = false; }
-  });
+  }
+  $('backupBtn').addEventListener('click', downloadBackup);
   $('restoreBtn').addEventListener('click', () => $('restoreFile').click());
   $('restoreFile').addEventListener('change', async () => {
     const file = $('restoreFile').files[0]; $('restoreFile').value = '';
@@ -2012,6 +2028,31 @@
     location.reload();
   }
   $('updateBtn').addEventListener('click', applyUpdate);
+
+  // Sinkron otomatis antar perangkat: perubahan dari kasir lain (transaksi, stok, kas, produksi)
+  // langsung diambil ulang. Tampilan yang sedang diisi (formulir, konfirmasi) tidak diganggu.
+  let stopSync = null, syncTimer = null;
+  const changed = new Set();
+  function startSync() {
+    stopSync?.();
+    stopSync = DB.subscribe(table => {
+      changed.add(table);
+      clearTimeout(syncTimer); syncTimer = setTimeout(applyRemoteChanges, 800);
+    }, status => { const live = status === 'SUBSCRIBED'; $('netStatus').classList.toggle('live', live); $('netStatus').title = live ? 'Online · sinkron otomatis antar perangkat aktif' : 'Status koneksi'; });
+  }
+  const busy = id => { const v = $(id); return !!v && (v.querySelector('.confirm, .perm-row, .pw-row, .cash-edit') ||
+    (v.contains(document.activeElement) && document.activeElement.matches('input, textarea, select'))); };
+  async function applyRemoteChanges() {
+    const t = new Set(changed); changed.clear();
+    if (!role) return;
+    const has = (...xs) => xs.some(x => t.has(x));
+    if (has('orders', 'products')) { await loadProducts(); refreshPendingCount(); }
+    if (currentTab === 'pesanan' && has('orders') && !busy('view-pesanan')) renderOrders();
+    if (currentTab === 'kas' && has('orders', 'cash_days', 'cash_out')) { refreshCashFigures(true); if (!busy('view-kas')) renderCashHistory(); }
+    if (currentTab === 'laporan' && has('orders', 'productions')) renderReport();
+    if (currentTab === 'pembelian' && has('orders', 'productions') && $('prodForm').hidden) renderProduction();
+    if (currentTab === 'kontak' && has('orders') && !busy('view-kontak')) renderContacts();
+  }
 
   // Tombol Segarkan: ambil ulang semua data (produk, pesanan, pengingat, tab yang terbuka) dan cek versi
   async function refreshAll(showToast = true) {

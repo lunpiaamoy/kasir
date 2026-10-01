@@ -547,3 +547,4 @@ h3.sub { margin-top: 18px; }
 #view-pembelian > .hint { margin: 0 0 12px; }
 #recentTable td:first-child, #recentTable td:nth-child(2) { white-space: nowrap; }
 .denom-total { grid-column: 1 / -1; }
+.net.live i { box-shadow: 0 0 0 3px var(--ok-tint); }
