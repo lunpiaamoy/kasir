@@ -1972,6 +1972,64 @@
     if (role) { openTab(currentTab); refreshNotices(); }
   }
   setInterval(checkNewDay, 60000);
+
+  // ---------------------------------------------------------------- Online / offline & versi baru
+  // Status koneksi: dari browser (online/offline) dan cek ke server tiap 30 detik.
+  // Begitu tersambung lagi, data tab yang terbuka diambil ulang.
+  let online = true;
+  function setOnline(on) {
+    if (on === online) return;
+    online = on;
+    $('netStatus').classList.toggle('off', !on);
+    $('netStatus').querySelector('em').textContent = on ? 'Online' : 'Offline';
+    $('offlineBar').hidden = on;
+    if (on && role) { toast('Tersambung lagi'); refreshAll(false); }
+  }
+  async function checkOnline() { setOnline(navigator.onLine && await DB.ping()); }
+  window.addEventListener('online', checkOnline);
+  window.addEventListener('offline', () => setOnline(false));
+  setInterval(checkOnline, 30000);
+
+  // Versi aplikasi: nomor ?v= di index.html. Kalau di server sudah lebih baru, tampilkan tombol perbarui.
+  const APP_VERSION = Number((document.querySelector('script[src*="app.js"]')?.getAttribute('src') || '').match(/v=(\d+)/)?.[1] || 0);
+  async function checkVersion() {
+    try {
+      const html = await (await fetch('./?cek=' + Date.now(), { cache: 'no-store' })).text();
+      const v = Number(html.match(/app\.js\?v=(\d+)/)?.[1] || 0);
+      $('updateBar').hidden = !(v > APP_VERSION);
+      return v > APP_VERSION;
+    } catch { return false; }
+  }
+  setInterval(checkVersion, 5 * 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkVersion(); checkOnline(); } });
+  async function applyUpdate() {
+    $('updateBtn').disabled = true;
+    try {
+      const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
+      if (window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+    } catch {}
+    location.reload();
+  }
+  $('updateBtn').addEventListener('click', applyUpdate);
+
+  // Tombol Segarkan: ambil ulang semua data (produk, pesanan, pengingat, tab yang terbuka) dan cek versi
+  async function refreshAll(showToast = true) {
+    if (!role) return;
+    $('syncBtn').disabled = true;
+    try {
+      await checkOnline();
+      if (!online) return toast('Offline: data belum bisa diambil dari server', true);
+      perms = await DB.myPerms(role).catch(() => perms); applyPerms();
+      opts = await DB.myOptions().catch(() => opts);
+      await loadProducts(); refreshPendingCount();
+      openTab(currentTab);
+      const newer = await checkVersion();
+      if (showToast) toast(newer ? 'Data diperbarui · ada versi aplikasi baru, tekan "Perbarui sekarang"' : 'Data sudah yang terbaru');
+    } finally { $('syncBtn').disabled = false; }
+  }
+  $('syncBtn').addEventListener('click', () => refreshAll(true));
+  checkVersion();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
   window.addEventListener('focus', checkNewDay);
 

@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
 
@@ -32,11 +32,21 @@
     <button class="tab need-kontak" data-tab="kontak">Kontak</button>
   </nav>
   <div class="who">
+    <span class="net" id="netStatus" role="status" title="Status koneksi"><i></i><em>Online</em></span>
     <span id="whoEmail"></span>
+    <button class="ghost small icon-btn" id="syncBtn" title="Segarkan: ambil data terbaru dari server dan periksa versi aplikasi" aria-label="Segarkan data">↻</button>
     <button class="ghost small owner-only" id="settingsBtn">Pengaturan</button>
     <button class="ghost small" id="logoutBtn">Keluar</button>
   </div>
 </header>
+
+<div class="update-bar" id="updateBar" hidden>
+  <b>Versi baru aplikasi tersedia.</b> <span class="muted">Simpan dulu transaksi yang sedang diisi.</span>
+  <button class="primary small" id="updateBtn">Perbarui sekarang</button>
+</div>
+<div class="offline-bar" id="offlineBar" hidden>
+  <b>Offline.</b> Tidak tersambung ke server: transaksi dan perubahan belum bisa disimpan. Periksa internet; aplikasi tersambung lagi otomatis.
+</div>
 
 <div class="demo-banner" id="demoBanner" hidden>
   <b>Mode contoh.</b> Data hanya tersimpan di perangkat ini dan belum terhubung ke database online.
@@ -373,9 +383,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=35"></script>
-<script src="db.js?v=35"></script>
-<script src="app.js?v=35"></script>
+<script src="config.js?v=36"></script>
+<script src="db.js?v=36"></script>
+<script src="app.js?v=36"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
