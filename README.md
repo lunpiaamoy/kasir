@@ -23,7 +23,8 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 | **Ubah** dan **hapus** nota | ✅ | ❌ |
 | Tambah/ubah produk dan harga | ✅ | ❌ |
 | Koreksi stok (mengurangi) dan stok opname | ✅ | ❌ |
-| Mengubah kas yang sudah ditutup | ✅ | ❌ |
+| Mengubah kas yang sudah ditutup, ubah/hapus riwayat kas | ✅ | ❌ |
+| Ubah/hapus kontak | ✅ | ❌ |
 
 Batasan ini dipasang di database, bukan hanya dengan menyembunyikan tombol.
 
@@ -39,7 +40,7 @@ Kalau `config.js` belum diisi, aplikasi berjalan dalam **mode contoh**: data han
    ```sql
    insert into public.staff (email, name) values ('email-kamu@gmail.com', 'Nama');
    ```
-4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql), dengan cara yang sama. Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
+4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql) dan [`supabase/004_ubah_hapus_kas_kontak.sql`](supabase/004_ubah_hapus_kas_kontak.sql), dengan cara yang sama. Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
 5. Buat akun login untuk setiap staf di **Authentication → Users → Add user → Create new user**, dengan email yang sama dan centang **Auto Confirm User**.
 6. Matikan pendaftaran umum di **Authentication → Sign In / Providers**: nonaktifkan **Allow new users to sign up**. Kalau tersedia di paket Anda, nyalakan juga **Leaked password protection**.
 7. Salin **Project URL** dan **anon / publishable key** dari **Project Settings → API** ke `config.js`.

@@ -603,18 +603,21 @@
   // Satu kontak per nomor WA (atau per nama kalau tanpa nomor); nama yang dipakai = nama terakhir.
   let contacts = [];
   async function renderContacts() {
-    let rows;
-    try { rows = await DB.listCustomers(); } catch (e) { toast(e.message, true); return; }
+    let rows, hidden;
+    try { [rows, hidden] = await Promise.all([DB.listCustomers(), DB.listHiddenContacts()]); } catch (e) { toast(e.message, true); return; }
+    const hiddenAt = new Map(hidden.map(h => [h.key, new Date(h.hidden_at)]));
     const map = new Map();
     rows.filter(o => (o.customer_name || '').trim() || (o.customer_wa || '').trim()).forEach(o => {
       const num = waNumber(o.customer_wa), key = num || 'n:' + o.customer_name.trim().toLowerCase();
-      const c = map.get(key) || { name: '', wa: '', n: 0, spent: 0, last: '' };
+      const c = map.get(key) || { key, name: '', wa: '', n: 0, spent: 0, last: '' };
       if (o.created_at >= c.last) { c.last = o.created_at; if (o.customer_name.trim()) c.name = o.customer_name.trim(); if (o.customer_wa) c.wa = o.customer_wa.trim(); }
       if (!c.name && o.customer_name.trim()) c.name = o.customer_name.trim();
       if (o.status !== 'batal') { c.n++; c.spent += o.total; }
       map.set(key, c);
     });
-    contacts = [...map.values()].sort((a, b) => b.last.localeCompare(a.last));
+    // Kontak yang dihapus disembunyikan, kecuali ada transaksi baru setelah dihapus
+    contacts = [...map.values()].filter(c => !(hiddenAt.get(c.key) >= new Date(c.last)))
+      .sort((a, b) => b.last.localeCompare(a.last));
     $('contactCount').textContent = `${contacts.length} kontak`;
     $('contactTable').innerHTML = `
       <thead><tr><th>Nama</th><th>WA</th><th class="num">Transaksi</th><th class="num">Total belanja</th><th>Terakhir beli</th><th></th></tr></thead>
@@ -629,6 +632,8 @@
           <td><div class="add-stock">
             <button class="primary small" data-neworder="${i}">Pesan baru</button>
             ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
+            <button class="ghost small owner-only" data-contactedit="${i}">Ubah</button>
+            <button class="ghost small danger owner-only" data-contactdel="${i}">Hapus</button>
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -641,10 +646,38 @@
     });
   }
   $('contactSearch').addEventListener('input', filterContacts);
-  $('contactTable').addEventListener('click', e => {
+  $('contactTable').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.neworder) {
-      const c = contacts[Number(b.dataset.neworder)];
+    const d = b.dataset;
+    try {
+      if (d.contactedit) {   // Ubah (pemilik): nama & WA diganti di semua transaksi kontak ini
+        const c = contacts[Number(d.contactedit)], row = b.closest('tr');
+        row.innerHTML = `<td colspan="6"><div class="cash-edit">
+          <label>Nama<input data-f="name" value="${esc(c.name)}" autocomplete="off"></label>
+          <label>WA<input data-f="wa" value="${esc(c.wa)}" inputmode="tel" autocomplete="off"></label>
+          <span class="muted grow">Nama & nomor diganti di ${c.n} transaksi kontak ini.</span>
+          <div class="actions"><button class="primary small" data-contactsave="${d.contactedit}">Simpan</button>
+          <button class="ghost small" data-contactcancel>Batal</button></div>
+        </div></td>`;
+        row.querySelector('input').focus();
+        return;
+      }
+      if (d.contactsave) {
+        const c = contacts[Number(d.contactsave)], box = b.closest('.cash-edit');
+        const name = box.querySelector('[data-f="name"]').value.trim(), wa = box.querySelector('[data-f="wa"]').value.trim();
+        if (!name && !wa) return toast('Isi nama atau nomor WA', true);
+        const n = await DB.updateContact(c.key, name, wa);
+        toast(`Kontak diperbarui (${n} transaksi)`); return renderContacts();
+      }
+      if ('contactcancel' in d) return renderContacts();
+      if (d.contactdel) {    // Hapus (pemilik): hanya dari daftar; transaksi tetap
+        const c = contacts[Number(d.contactdel)];
+        if (!confirm(`Hapus ${c.name || c.wa} dari daftar kontak? Transaksinya tidak dihapus. Kontak muncul lagi kalau ia belanja lagi.`)) return;
+        await DB.hideContact(c.key); toast('Kontak dihapus dari daftar'); return renderContacts();
+      }
+    } catch (err) { return toast(err.message, true); }
+    if (d.neworder) {
+      const c = contacts[Number(d.neworder)];
       resetCart();
       $('custName').value = c.name; $('custWa').value = c.wa;
       openTab('kasir');
@@ -1031,11 +1064,12 @@
     let days;
     try { days = await DB.listCashDays(ymdLocal(from)); } catch { $('cashHistory').innerHTML = ''; return; }
     const who = e => esc((e || '').split('@')[0]);
+    cashRows = new Map(days.map(c => [c.day, c]));
     $('cashHistory').innerHTML = `
-      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th></tr></thead>
+      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th><th class="owner-only"></th></tr></thead>
       <tbody>${days.length ? days.map(c => {
         const d = c.closed_at ? c.counted - c.expected : null;
-        return `<tr>
+        return `<tr data-day="${esc(c.day)}">
           <td data-sort="${esc(c.day)}">${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
           <td class="num">${rp(c.opening)}</td>
           <td class="num">${c.closed_at ? rp(c.expected) : '—'}</td>
@@ -1043,9 +1077,51 @@
           <td data-sort="${d ?? ''}">${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
+          <td class="owner-only"><div class="add-stock">
+            <button class="ghost small" data-cashedit="${esc(c.day)}">Ubah</button>
+            <button class="ghost small danger" data-cashdel="${esc(c.day)}">Hapus</button>
+          </div></td>
         </tr>`;
-      }).join('') : '<tr><td class="empty" colspan="7">Belum ada catatan kas.</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td class="empty" colspan="8">Belum ada catatan kas.</td></tr>'}</tbody>`;
   }
+
+  // Ubah / hapus kas di riwayat (pemilik). Ubah: uang awal, uang dihitung (kalau sudah ditutup), catatan;
+  // selisih dihitung ulang dari "seharusnya" yang tersimpan saat tutup kasir.
+  let cashRows = new Map();
+  $('cashHistory').addEventListener('click', async e => {
+    const t = e.target.closest('button'); if (!t) return;
+    const d = t.dataset;
+    try {
+      if (d.cashedit) {
+        const c = cashRows.get(d.cashedit), row = t.closest('tr');
+        row.innerHTML = `<td colspan="8"><div class="cash-edit">
+          <b>${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</b>
+          <label>Uang awal<input inputmode="numeric" data-f="opening" value="${rp(c.opening)}"></label>
+          ${c.closed_at ? `<label>Uang dihitung<input inputmode="numeric" data-f="counted" value="${rp(c.counted)}"></label>` : ''}
+          <label class="grow">Catatan<input data-f="note" value="${esc(c.note || '')}" autocomplete="off"></label>
+          <div class="actions"><button class="primary small" data-cashsave="${esc(c.day)}">Simpan</button>
+          <button class="ghost small" data-cashcancel>Batal</button></div>
+        </div></td>`;
+        row.querySelector('input').focus();
+      } else if (d.cashsave) {
+        const c = cashRows.get(d.cashsave), box = t.closest('.cash-edit');
+        const val = f => box.querySelector(`[data-f="${f}"]`)?.value;
+        const f = { opening: toInt(val('opening')), note: val('note').trim() };
+        if (f.opening !== c.opening) f.opening_detail = null;            // rincian lama tidak cocok lagi
+        if (c.closed_at) { f.counted = toInt(val('counted')); if (f.counted !== c.counted) f.counted_detail = null; }
+        await DB.updateCashDay(c.day, f).catch(async err => {
+          if (!/opening_detail|counted_detail|PGRST204/.test(err.message)) throw err;   // kolom rincian (003) belum ada
+          delete f.opening_detail; delete f.counted_detail; await DB.updateCashDay(c.day, f);
+        });
+        toast('Kas diperbarui'); renderCash();
+      } else if ('cashcancel' in d) renderCashHistory();
+      else if (d.cashdel) {
+        const c = cashRows.get(d.cashdel);
+        if (!confirm(`Hapus catatan kas ${parseYmd(c.day).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}? Data penjualan tidak berubah.`)) return;
+        await DB.deleteCashDay(c.day); toast('Catatan kas dihapus'); renderCash(); refreshNotices();
+      }
+    } catch (err) { toast(err.message, true); }
+  });
 
   $('cashPanel').addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;

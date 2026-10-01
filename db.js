@@ -5,12 +5,12 @@
   const cfg = window.APP_CONFIG;
   const isDemo = !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY;
 
-  // Fungsi/tabel/kolom belum ada di database → 002_pembaruan.sql belum dijalankan
+  // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002, 003, 004) di Supabase (SQL Editor → Run).';
   function fail(error) {
     if (!error) return;
-    if (NOT_UPDATED.includes(error.code))
-      throw new Error('Database belum diperbarui. Jalankan file supabase/002_pembaruan.sql di Supabase (SQL Editor → Run).');
+    if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
     throw new Error(error.message || String(error));
   }
 
@@ -145,6 +145,31 @@
         const run = row => sb.from('cash_days').upsert(row, { onConflict: 'day' });
         let { error } = await run({ day, opening, opening_detail });
         if (error?.code === 'PGRST204') ({ error } = await run({ day, opening }));
+        fail(error);
+      },
+      // Ubah / hapus kas di riwayat (pemilik; hapus butuh 004_ubah_hapus_kas_kontak.sql)
+      async updateCashDay(day, f) {
+        const { data, error } = await sb.from('cash_days').update(f).eq('day', day).select();
+        fail(error);
+        if (!data.length) throw new Error('Kas tidak bisa diubah. Hanya pemilik yang bisa mengubah kas yang sudah ditutup.');
+      },
+      async deleteCashDay(day) {
+        const { data, error } = await sb.from('cash_days').delete().eq('day', day).select();
+        if (error?.code === '42501') throw new Error(UPDATE_MSG);
+        fail(error);
+        if (!data.length) throw new Error('Kas tidak bisa dihapus. Hanya pemilik yang bisa menghapus kas.');
+      },
+      // Kontak (pemilik): ubah nama/WA di semua transaksi kontak, atau sembunyikan dari daftar
+      async listHiddenContacts() {
+        const { data, error } = await sb.from('hidden_contacts').select('key, hidden_at');
+        return error ? [] : data;   // tabel belum ada (004 belum dijalankan): tidak ada yang disembunyikan
+      },
+      async updateContact(key, name, wa) {
+        const { data, error } = await sb.rpc('update_contact', { p_key: key, p_name: name, p_wa: wa }); fail(error); return data;
+      },
+      async hideContact(key) {
+        const { error } = await sb.from('hidden_contacts').upsert({ key, hidden_at: new Date().toISOString() }, { onConflict: 'key' });
+        if (error?.code === '42501') throw new Error('Hanya pemilik yang bisa menghapus kontak.');
         fail(error);
       },
       // Mulai ulang kas satu hari (pemilik): uang awal, hitungan, catatan, dan status tutup dikosongkan.
@@ -327,6 +352,17 @@
         db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening, opening_detail };
         save();
       },
+      async updateCashDay(day, f) { const c = load().cash?.[day]; if (c) { Object.assign(c, f); save(); } },
+      async deleteCashDay(day) { const db = load(); if (db.cash) { delete db.cash[day]; save(); } },
+      async listHiddenContacts() { return clone(Object.entries(load().hidden || {}).map(([key, hidden_at]) => ({ key, hidden_at }))); },
+      async updateContact(key, name, wa) {
+        const num = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
+        const k = o => num(o.customer_wa) || 'n:' + (o.customer_name || '').trim().toLowerCase();
+        let n = 0;
+        load().orders.forEach(o => { if (k(o) === key) { o.customer_name = name.trim(); o.customer_wa = wa.trim(); n++; } });
+        save(); return n;
+      },
+      async hideContact(key) { const db = load(); (db.hidden ||= {})[key] = new Date().toISOString(); save(); },
       async resetCash(day) {
         const c = load().cash?.[day]; if (!c) return;
         Object.assign(c, { opening: 0, opening_detail: null, expected: null, counted: null, counted_detail: null, note: '', closed_at: null, closed_by: null });
