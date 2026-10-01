@@ -75,7 +75,7 @@
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
-  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodTable'].forEach(makeSortable);
+  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodLeftTable', 'prodTable'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -116,7 +116,9 @@
   const can = k => isOwner() || !!perms[k];
   function applyPerms() {
     Object.keys(DB.permDefaults).forEach(k => document.body.classList.toggle('can-' + k, can(k)));
-    document.body.classList.toggle('can-stok_ubah', can('stok_masuk') || can('koreksi_stok'));
+    document.body.classList.toggle('can-stok_ubah', can('stok_masuk') || can('stok_kurang'));
+    document.body.classList.toggle('can-kas_ubah_hapus', can('kas_ubah') || can('kas_hapus'));
+    if (!can('pesanan')) $('pendingCount').hidden = true;
     // Tab yang sedang terbuka tidak boleh lagi → kembali ke Kasir
     const tab = document.querySelector(`.tab[data-tab="${currentTab}"]`);
     if (tab && getComputedStyle(tab).display === 'none') openTab('kasir');
@@ -150,6 +152,7 @@
     if (name === 'stok') loadProducts();
     if (name === 'kas') renderCash();
     if (name === 'laporan') renderReport();
+    if (name === 'pembelian') renderProduction();
   }
   document.querySelectorAll('[data-refresh]').forEach(b => b.addEventListener('click', () => openTab(currentTab)));
 
@@ -360,8 +363,18 @@
     setPay(o.pay_method); $('paid').value = o.pay_method === 'tunai' ? rp(o.paid) : '';
     $('cartTitle').textContent = `Ubah nota ${notaNo(o)}`;
     $('editBanner').innerHTML = `Stok dan total dihitung ulang saat disimpan. Harga produk yang sudah ada di nota tetap memakai harga lama.
-      <button class="link" id="cancelEditBtn">Batal ubah</button>`;
+      <button class="link" id="cancelEditBtn">Batal ubah</button>
+      <div class="seq-edit"><label for="editSeq">No. nota (${o.year})</label>
+        <input id="editSeq" inputmode="numeric" value="${String(o.seq).padStart(5, '0')}" autocomplete="off">
+        <span class="muted" id="seqGaps"></span></div>`;
     $('editBanner').hidden = false;
+    // Nomor yang terloncat (belum terpakai) di tahun nota ini, untuk diisi
+    DB.notaSeqs(o.year).then(seqs => {
+      const used = new Set(seqs), max = Math.max(0, ...seqs), gaps = [];
+      for (let n = 1; n < max && gaps.length < 12; n++) if (!used.has(n)) gaps.push(n);
+      if (editing?.order.id === o.id) $('seqGaps').textContent = gaps.length
+        ? `Nomor terloncat: ${gaps.map(n => String(n).padStart(5, '0')).join(', ')}${gaps.length === 12 ? ', …' : ''}` : 'Tidak ada nomor terloncat.';
+    }).catch(() => {});
     $('saveBtn').textContent = 'Simpan perubahan';
     openTab('kasir');
     document.querySelector('.cart').scrollIntoView({ block: 'start' });
@@ -380,6 +393,8 @@
       if (!timeValid()) return err('Pukul belum lengkap atau tidak valid. Ketik 4 angka, mis. 1030 untuk 10:30.');
     }
     if (pay === 'tunai' && toInt($('paid').value) < total) return err('Uang diterima kurang dari total.');
+    const seq = editing ? toInt($('editSeq').value) : null;
+    if (editing && !seq) return err('Isi nomor nota.');
 
     const payload = {
       items: [...cart].map(([product_id, qty]) => ({ product_id, qty })),
@@ -393,6 +408,7 @@
       pay_method: pay,
       paid: pay === 'tunai' ? toInt($('paid').value) : total,
       note: $('orderNote').value.trim(),
+      ...(editing ? { seq } : {}),
     };
     $('saveBtn').disabled = true;
     try {
@@ -662,7 +678,7 @@
             <button class="primary small" data-neworder="${i}">Pesan baru</button>
             ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
             <button class="ghost small need-kontak_ubah" data-contactedit="${i}">Ubah</button>
-            <button class="ghost small danger need-kontak_ubah" data-contactdel="${i}">Hapus</button>
+            <button class="ghost small danger need-kontak_hapus" data-contactdel="${i}">Hapus</button>
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -737,7 +753,7 @@
           </div></td>
           <td><div class="add-stock">
             <button class="ghost small" data-card="${p.id}">Kartu stok</button>
-            <button class="ghost small need-produk" data-edit="${p.id}">Ubah</button>
+            <button class="ghost small need-produk_ubah" data-edit="${p.id}">Ubah</button>
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="7">Belum ada produk.</td></tr>'}</tbody>`;
   }
@@ -749,7 +765,7 @@
       const raw = $('add-' + id).value.trim();
       const n = (raw.startsWith('-') ? -1 : 1) * toInt(raw);
       if (!n) return toast('Isi jumlah stok yang mau ditambahkan', true);
-      if (n < 0 && !can('koreksi_stok')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
+      if (n < 0 && !can('stok_kurang')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
       if (n > 0 && !can('stok_masuk')) return toast('Akun ini tidak punya wewenang menambah stok', true);
       try { await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok'); toast(`Stok ${byId(id).name} ${n > 0 ? '+' : ''}${n}`); loadProducts(); }
       catch (err) { toast(err.message, true); }
@@ -995,7 +1011,6 @@
     $('dailyTable').innerHTML = `<thead><tr><th>${listUnit === 'month' ? 'Bulan' : 'Tanggal'}</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
       <tbody>${rows.length ? rows.map(b => `<tr><td data-sort="${esc(b.key)}">${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
-    if (isOwner()) renderProduction(valid, total);
   }
 
   // ---------------------------------------------------------------- Pembelian bahan & produksi (pemilik)
@@ -1006,7 +1021,17 @@
   const BAHAN = ['Kulit lunpia', 'Telur', 'Rebung', 'Ayam', 'Udang'];
   const SATUAN = ['kg', 'gr', 'lembar', 'butir', 'ikat', 'liter', 'pcs', 'bungkus'];
   const usedOf = b => Number(b.qty) > 0 ? Number(b.price) * Math.max(0, Number(b.qty) - Number(b.leftover || 0)) / Number(b.qty) : Number(b.price) || 0;
-  let productions = [], allProductions = [], prodSales = { valid: [], total: 0 };
+  let productions = [], allProductions = [], prodRange = rangeFor('month');
+  $('prodRangeSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-range]'); if (!b) return;
+    setSeg($('prodRangeSeg'), b.dataset.range); prodRange = rangeFor(b.dataset.range); renderProduction();
+  });
+  $('pApply').addEventListener('click', () => {
+    if (!$('pFrom').value || !$('pTo').value) return toast('Pilih tanggal awal dan akhir', true);
+    const from = parseYmd($('pFrom').value), to = new Date(+parseYmd($('pTo').value) + 864e5);
+    if (to <= from) return toast('Tanggal akhir harus setelah tanggal awal', true);
+    setSeg($('prodRangeSeg'), ''); prodRange = [from, to]; renderProduction();
+  });
   const byNewest = (a, b) => b.day.localeCompare(a.day) || b.id - a.id;
   // Sisa bahan dari satu catatan, bahan & satuan yang sama digabung; nilai = harga × sisa / jumlah
   function leftoversOf(entry) {
@@ -1026,17 +1051,19 @@
     return last && !carried.has(last.id) && leftoversOf(last).length ? last : null;
   }
 
-  async function renderProduction(valid, total) {
-    prodSales = { valid, total };
-    const [from, to] = range;
+  async function renderProduction() {
+    const [from, to] = prodRange;
     const fromDay = ymdLocal(from), toDay = ymdLocal(new Date(+to - 864e5));
+    $('pFrom').value = fromDay; $('pTo').value = toDay;
+    let valid = [];
     try {
       allProductions = await DB.listProductions('2000-01-01', '2999-12-31');
+      valid = (await DB.listOrders(from.toISOString(), to.toISOString())).filter(o => o.status !== 'batal');
       productions = allProductions.filter(p => p.day >= fromDay && p.day <= toDay).sort(byNewest);
     } catch (e) {
       productions = allProductions = [];
       $('prodMetrics').innerHTML = `<p class="error">${esc(e.message)}</p>`;
-      ['prodOutTable', 'prodBuyTable', 'prodTable'].forEach(id => ($(id).innerHTML = ''));
+      ['prodOutTable', 'prodBuyTable', 'prodLeftTable', 'prodTable'].forEach(id => ($(id).innerHTML = ''));
       return;
     }
     const buys = productions.flatMap(p => p.purchases || []), outs = productions.flatMap(p => p.outputs || []);
@@ -1045,14 +1072,18 @@
     const stockValue = stockNow.reduce((s, r) => s + r.price, 0);
     const used = Math.round(buys.reduce((s, b) => s + usedOf(b), 0));
     const pcs = outs.reduce((s, o) => s + Number(o.qty || 0), 0);
-    const profit = total - used;
-    $('prodMetrics').innerHTML = productions.length ? `
-      <div class="metric"><small>Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
-      <div class="metric"><small>Sisa bahan sekarang</small><b>Rp ${rp(stockValue)}</b><span>${stockNow.length ? esc(stockNow.map(r => `${r.item} ${dec(r.qty)} ${r.unit}`).join(', ')) : 'Tidak ada sisa'}</span></div>
+    const total = valid.reduce((s, o) => s + o.total, 0), profit = total - used;
+    $('prodMetrics').innerHTML = (productions.length ? `
+      <div class="metric"><small>1. Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
       <div class="metric"><small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>${pcs ? `± Rp ${rp(Math.round(used / pcs))} per pcs` : 'Belum ada hasil produksi'}</span></div>
-      <div class="metric"><small>Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>
-      <div class="metric lead"><small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan Rp ${rp(total)} − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span></div>`
-      : '<p class="muted">Belum ada catatan pembelian &amp; produksi di periode ini.</p>';
+      <div class="metric"><small>2. Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>`
+      : '<p class="muted">Belum ada catatan pembelian &amp; produksi di periode ini.</p>') + `
+      <div class="metric"><small>3. Sisa bahan sekarang</small><b>Rp ${rp(stockValue)}</b><span>${stockNow.length ? `${stockNow.length} bahan` : 'Tidak ada sisa'}</span></div>
+      ${productions.length ? `<div class="metric lead need-laba"><small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan Rp ${rp(total)} − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span></div>` : ''}`;
+
+    $('prodLeftTable').innerHTML = `<thead><tr><th>Bahan</th><th class="num">Sisa</th><th class="num">Nilai</th></tr></thead>
+      <tbody>${stockNow.length ? stockNow.map(r => `<tr><td>${esc(r.item)}</td><td class="num" data-sort="${r.qty}">${dec(r.qty)} ${esc(r.unit)}</td><td class="num">${rp(r.price)}</td></tr>`).join('')
+        : '<tr><td class="empty" colspan="3">Tidak ada sisa bahan.</td></tr>'}</tbody>`;
 
     // Hasil produksi vs terjual per produk
     const per = new Map();
@@ -1086,8 +1117,8 @@
         <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}${p.stocked && p.outputs?.length ? ' <span class="chip ok">masuk stok</span>' : ''}</td>
         <td class="num">${rp(Math.round((p.purchases || []).reduce((s, b) => s + usedOf(b), 0)))}</td>
         <td>${esc(p.note || '')}</td>
-        <td><div class="add-stock"><button class="ghost small" data-prodedit="${p.id}">Ubah</button>
-          <button class="ghost small danger" data-proddel="${p.id}">Hapus</button></div></td>
+        <td><div class="add-stock"><button class="ghost small need-pembelian_catat" data-prodedit="${p.id}">Ubah</button>
+          <button class="ghost small danger need-pembelian_hapus" data-proddel="${p.id}">Hapus</button></div></td>
       </tr>`).join('') : '<tr><td class="empty" colspan="6">—</td></tr>'}</tbody>`;
   }
 
@@ -1193,7 +1224,7 @@
       toast(carriedBy ? `Catatan disimpan. Sisa bahannya sudah dibawa ke catatan ${dmy(parseYmd(carriedBy.day))}; ubah juga di sana kalau sisanya berubah.`
         : x.stocked && x.outputs.length ? 'Catatan disimpan, stok produk ikut diperbarui' : 'Catatan disimpan');
       $('prodForm').hidden = true; $('prodForm').innerHTML = '';
-      renderProduction(prodSales.valid, prodSales.total); loadProducts();
+      renderProduction(); loadProducts();
     } catch (err) { toast(err.message, true); b.disabled = false; }
   });
   $('prodTable').addEventListener('click', async e => {
@@ -1202,7 +1233,7 @@
     if (b.dataset.proddel) {
       const p = productions.find(x => x.id === Number(b.dataset.proddel));
       if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?${p.stocked && p.outputs?.length ? '\nStok hasil produksinya ikut dikurangi kembali.' : ''}`)) return;
-      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); loadProducts(); }
+      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(); loadProducts(); }
       catch (err) { toast(err.message, true); }
     }
   });
@@ -1238,18 +1269,18 @@
     if (c.outErr) return `<p class="error">${esc(c.outErr)}</p>`;
     if (!c.out.length) return '<p class="muted">Belum ada kas keluar hari ini.</p>';
     return `<div class="table-wrap"><table class="table">
-      <thead><tr><th>Jam</th><th>Keterangan</th><th class="num">Jumlah</th><th>Oleh</th><th class="need-kas_ubah"></th></tr></thead>
+      <thead><tr><th>Jam</th><th>Keterangan</th><th class="num">Jumlah</th><th>Oleh</th><th class="need-kas_hapus"></th></tr></thead>
       <tbody>${c.out.map(x => { const t = new Date(x.created_at); return `<tr>
         <td>${pad(t.getHours())}.${pad(t.getMinutes())}</td><td>${esc(x.note || '-')}</td>
         <td class="num">${rp(x.amount)}</td><td class="muted">${esc((x.created_by || '').split('@')[0])}</td>
-        <td class="need-kas_ubah"><button class="ghost small danger" data-cashout-del="${x.id}">Hapus</button></td>
+        <td class="need-kas_hapus"><button class="ghost small danger" data-cashout-del="${x.id}">Hapus</button></td>
       </tr>`; }).join('')}</tbody></table></div>`;
   }
   function cashOutSection(c, closed) {
     return `<section class="cash-out">
       <h3>Kas keluar hari ini <span class="muted">(pengeluaran dari laci: beli bahan, bensin, parkir, bayar kurir…)</span></h3>
       <div id="cashOutList">${cashOutList(c)}</div>
-      ${closed || c.outErr ? '' : `<div class="cash-row">
+      ${closed || c.outErr || !can('kas_keluar') ? '' : `<div class="cash-row">
         <div><label for="outAmount">Jumlah</label><input id="outAmount" inputmode="numeric" placeholder="0" autocomplete="off"></div>
         <div class="grow"><label for="outNote">Keterangan</label><input id="outNote" placeholder="mis. beli rebung" autocomplete="off"></div>
         <button class="ghost" data-cashout-add>Catat kas keluar</button>
@@ -1289,6 +1320,10 @@
     const resetLink = can('kas_ubah') ? '<p class="cash-reset"><button class="link danger" data-cash-reset>Mulai ulang kas hari ini</button></p>' : '';
     const head = `<div class="view-head"><h2 id="cashTitle">Kas hari ini</h2><span class="muted">${esc(longDate(new Date()))}</span></div>`;
     cashMode = !cd || editOpening ? 'open' : cd.closed_at && !recount ? 'closed' : 'count';
+    if (!cd && !can('kas_buka')) {
+      $('cashPanel').innerHTML = `${head}<p class="muted">Uang awal hari ini belum diisi. Akun ini tidak punya wewenang mengisi uang awal.</p>`;
+      return;
+    }
     if (!cd || editOpening) {
       $('cashPanel').innerHTML = `${head}
         <p class="muted">Hitung uang di laci saat toko buka: isi jumlah lembar/keping tiap pecahan.</p>
@@ -1309,14 +1344,15 @@
       return;
     }
     $('cashPanel').innerHTML = `${head}${figures}
-      <p class="muted">Tutup kasir: hitung uang di laci per pecahan. ${recount ? '' : '<button class="link" data-cash-editopen>Ubah uang awal</button>'}</p>
+      ${!can('kas_tutup') && !recount ? `<p class="muted">Kasir belum ditutup.${can('kas_buka') ? ' <button class="link" data-cash-editopen>Ubah uang awal</button>' : ''}</p>${resetLink}` : `
+      <p class="muted">Tutup kasir: hitung uang di laci per pecahan. ${recount || !can('kas_buka') ? '' : '<button class="link" data-cash-editopen>Ubah uang awal</button>'}</p>
       ${denomGrid('count', recount ? cd.counted_detail : null)}
       <p class="cash-diff" id="cashDiff"></p>
       <div class="cash-row">
         <div class="grow"><label for="cashNote">Catatan</label><input id="cashNote" autocomplete="off" value="${recount ? esc(cd.note || '') : ''}"></div>
         <button class="primary" data-cash-close>Tutup kasir</button>
         ${recount ? '<button class="ghost" data-cash-cancel>Batal</button>' : ''}
-      </div>${resetLink}`;
+      </div>${resetLink}`}`;
     updateDenoms('count');
   }
   // Angka kas diperbarui tanpa menghapus isian (mis. ada penjualan dari perangkat lain).
@@ -1355,14 +1391,56 @@
     const all = [...e.target.closest('[data-denoms]').querySelectorAll('[data-denom]')];
     all[all.indexOf(e.target) + 1]?.focus();
   });
+  // Riwayat kas: harian (31 hari), atau dijumlahkan per minggu (12 minggu), per bulan (12 bulan), per tahun
+  let cashView = 'day';
+  $('cashViewSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-cv]'); if (!b || b.dataset.cv === cashView) return;
+    cashView = b.dataset.cv; setSeg($('cashViewSeg'), cashView); delete sortState.cashHistory; renderCashHistory();
+  });
+  const weekStart = d => { const x = parseYmd(d); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+  function cashPeriod(day) {
+    if (cashView === 'week') { const s = weekStart(day), e = new Date(+s + 6 * 864e5);
+      return [ymdLocal(s), `${s.getDate()} ${s.toLocaleDateString('id-ID', { month: 'short' })} – ${e.getDate()} ${e.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}`]; }
+    if (cashView === 'month') return [day.slice(0, 7), parseYmd(day).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })];
+    return [day.slice(0, 4), day.slice(0, 4)];
+  }
   async function renderCashHistory() {
-    const from = new Date(); from.setDate(from.getDate() - 13);
-    let days;
-    try { days = await DB.listCashDays(ymdLocal(from)); } catch { $('cashHistory').innerHTML = ''; return; }
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    if (cashView === 'day') from.setDate(from.getDate() - 30);
+    if (cashView === 'week') { from.setTime(+weekStart(ymdLocal(from))); from.setDate(from.getDate() - 7 * 11); }
+    if (cashView === 'month') { from.setDate(1); from.setMonth(from.getMonth() - 11); }
+    if (cashView === 'year') from.setFullYear(2000, 0, 1);
+    $('cashHistoryTitle').textContent = { day: 'Riwayat kas 31 hari terakhir', week: 'Riwayat kas per minggu (12 minggu)',
+      month: 'Riwayat kas per bulan (12 bulan)', year: 'Riwayat kas per tahun' }[cashView];
+    let days, outs = [];
+    try {
+      days = await DB.listCashDays(ymdLocal(from));
+      if (cashView !== 'day') outs = await DB.listCashOutFrom(ymdLocal(from)).catch(() => []);
+    } catch { $('cashHistory').innerHTML = ''; return; }
     const who = e => esc((e || '').split('@')[0]);
     cashRows = new Map(days.map(c => [c.day, c]));
+    if (cashView !== 'day') {
+      const groups = new Map();
+      const g = day => { const [key, label] = cashPeriod(day);
+        return groups.get(key) || groups.set(key, { key, label, days: 0, closed: 0, diff: 0, over: 0, short: 0, out: 0 }).get(key); };
+      days.forEach(c => {
+        const r = g(c.day); r.days++;
+        if (c.closed_at) { const d = c.counted - c.expected; r.closed++; r.diff += d; if (d > 0) r.over += d; if (d < 0) r.short -= d; }
+      });
+      outs.forEach(x => { g(x.day).out += x.amount; });
+      const rows = [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+      $('cashHistory').innerHTML = `
+        <thead><tr><th>${{ week: 'Minggu', month: 'Bulan', year: 'Tahun' }[cashView]}</th><th class="num">Hari buka</th><th class="num">Ditutup</th>
+          <th class="num">Lebih</th><th class="num">Kurang</th><th>Total selisih</th><th class="num">Kas keluar</th></tr></thead>
+        <tbody>${rows.length ? rows.map(r => `<tr>
+          <td data-sort="${esc(r.key)}">${esc(r.label)}</td><td class="num">${r.days}</td><td class="num">${r.closed}</td>
+          <td class="num">${r.over ? rp(r.over) : '—'}</td><td class="num">${r.short ? rp(r.short) : '—'}</td>
+          <td data-sort="${r.diff}">${!r.closed ? '<span class="chip plain">—</span>' : r.diff === 0 ? '<span class="chip ok">Pas</span>' : r.diff > 0 ? `<span class="chip warn">Lebih ${rp(r.diff)}</span>` : `<span class="chip bad">Kurang ${rp(-r.diff)}</span>`}</td>
+          <td class="num">${rp(r.out)}</td></tr>`).join('') : '<tr><td class="empty" colspan="7">Belum ada catatan kas.</td></tr>'}</tbody>`;
+      return;
+    }
     $('cashHistory').innerHTML = `
-      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th><th class="need-kas_ubah"></th></tr></thead>
+      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th><th class="need-kas_ubah_hapus"></th></tr></thead>
       <tbody>${days.length ? days.map(c => {
         const d = c.closed_at ? c.counted - c.expected : null;
         return `<tr data-day="${esc(c.day)}">
@@ -1373,9 +1451,9 @@
           <td data-sort="${d ?? ''}">${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
-          <td class="need-kas_ubah"><div class="add-stock">
-            <button class="ghost small" data-cashedit="${esc(c.day)}">Ubah</button>
-            <button class="ghost small danger" data-cashdel="${esc(c.day)}">Hapus</button>
+          <td class="need-kas_ubah_hapus"><div class="add-stock">
+            <button class="ghost small need-kas_ubah" data-cashedit="${esc(c.day)}">Ubah</button>
+            <button class="ghost small danger need-kas_hapus" data-cashdel="${esc(c.day)}">Hapus</button>
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="8">Belum ada catatan kas.</td></tr>'}</tbody>`;
@@ -1468,9 +1546,9 @@
     const nTomorrow = pending.filter(o => o.fulfill_date === tomorrow).length;
     const items = [];
     if (DB.needsUpdate) items.push(`<div class="notice bad"><b>Database belum diperbarui.</b> Aplikasi berjalan dengan cara lama: semua staf dianggap pemilik, dan kas harian, stok opname, serta ubah/hapus nota belum bisa dipakai. Jalankan file <b>supabase/002_pembaruan.sql</b> di Supabase (SQL Editor → Run), lalu muat ulang halaman ini.</div>`);
-    if (cd === null && can('kas')) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
-    if (late) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
-    if (nToday || nTomorrow) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
+    if (cd === null && can('kas_buka')) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
+    if (late && can('pesanan')) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
+    if ((nToday || nTomorrow) && can('pesanan')) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     $('kasirNotices').innerHTML = items.join('');
   }
   $('kasirNotices').addEventListener('click', e => { const b = e.target.closest('[data-goto]'); if (b) openTab(b.dataset.goto); });
@@ -1639,13 +1717,23 @@
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
     <option value="kasir"${r === 'kasir' ? ' selected' : ''}>Kasir</option>
     <option value="pemilik"${r === 'pemilik' ? ' selected' : ''}>Pemilik</option></select>`;
-  const PERM_GROUPS = [
-    ['Nota & pesanan', { batal: 'Batalkan pesanan', ubah_nota: 'Ubah nota', hapus_nota: 'Hapus nota' }],
-    ['Stok & produk', { stok_masuk: 'Tambah stok masuk', koreksi_stok: 'Kurangi stok & stok opname', produk: 'Tambah/ubah produk & harga' }],
-    ['Kas', { kas: 'Buka kas, tutup kasir, catat kas keluar', kas_ubah: 'Ubah kas yang sudah ditutup, hapus riwayat & kas keluar' }],
-    ['Laporan & kontak', { laporan: 'Lihat Laporan (omzet & grafik)', kontak: 'Lihat Kontak pembeli', kontak_ubah: 'Ubah & hapus kontak' }],
+  // Per tab: [wewenang membuka tab, judul, keterangan, { pilihan di dalam tab }]
+  const PERM_TABS = [
+    ['pesanan', 'Tab Pesanan', 'Lihat pesanan & riwayat transaksi, tandai selesai, cetak ulang, ingatkan via WA',
+      { batal: 'Batalkan pesanan', ubah_nota: 'Ubah nota (termasuk nomor nota)', hapus_nota: 'Hapus nota' }],
+    ['stok', 'Tab Stok', 'Lihat stok & kartu stok',
+      { stok_masuk: 'Tambah stok masuk', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
+        produk_tambah: 'Tambah produk baru', produk_ubah: 'Ubah produk, harga & sembunyikan produk' }],
+    ['kas', 'Tab Kas', 'Lihat kas hari ini & riwayat kas',
+      { kas_buka: 'Isi / ubah uang awal', kas_tutup: 'Tutup kasir (hitung uang di laci)', kas_keluar: 'Catat kas keluar',
+        kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar' }],
+    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris', { laporan_unduh: 'Unduh Excel (CSV)' }],
+    ['pembelian', 'Tab Pembelian', 'Lihat pembelian bahan, produksi & sisa bahan',
+      { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan', laba: 'Lihat laba' }],
+    ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
   ];
-  const permOf = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
+  const permRaw = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
+  const permOf = (st, k) => permRaw(st, k) && permRaw(st, DB.permParent[k] || k);
   let staffList = [];
   async function renderStaff() {
     let list;
@@ -1669,6 +1757,13 @@
         <td><button class="primary small" data-staffadd>Tambah staf</button></td>
       </tr></tbody>`;
   }
+  // Tab tidak dicentang → pilihan di dalamnya mati
+  $('staffTable').addEventListener('change', e => {
+    const fs = e.target.closest('[data-tabperm]');
+    if (!fs || e.target.dataset.perm !== fs.dataset.tabperm) return;
+    fs.querySelectorAll('.sub input').forEach(i => { i.disabled = !e.target.checked; if (!e.target.checked) i.checked = false; });
+    fs.classList.toggle('off', !e.target.checked);
+  });
   $('staffTable').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b) return;
     const row = b.closest('tr'), f = k => row.querySelector(`[data-f="${k}"]`)?.value.trim() || '';
@@ -1690,10 +1785,15 @@
         const st = staffList.find(x => x.email === row.dataset.email);
         row.insertAdjacentHTML('afterend', `<tr class="perm-row" data-email="${esc(st.email)}"><td colspan="4">
           <div class="perm-edit"><b>Wewenang ${esc(st.name || st.email)}</b>
-            <p class="muted hint">Yang tidak dicentang disembunyikan dari akun ini dan ditolak oleh database. Transaksi kasir, cetak/kirim nota, dan tandai pesanan selesai selalu boleh.</p>
-            <div class="perm-groups">${PERM_GROUPS.map(([title, items]) => `<fieldset><legend>${title}</legend>
-              ${Object.entries(items).map(([k, label]) => `<label class="check"><input type="checkbox" data-perm="${k}"${permOf(st, k) ? ' checked' : ''}> ${label}</label>`).join('')}
-            </fieldset>`).join('')}</div>
+            <p class="muted hint">Centang tab yang boleh dibuka, lalu pilih apa saja yang boleh dilakukan di tab itu. Yang tidak dicentang disembunyikan dari akun ini.</p>
+            <div class="perm-groups">
+              <fieldset><legend>Tab Kasir</legend><p class="muted perm-always">Selalu boleh: transaksi, cetak struk, kirim nota WA.</p></fieldset>
+              ${PERM_TABS.map(([tab, title, desc, items]) => `<fieldset data-tabperm="${tab}">
+                <legend><label class="check"><input type="checkbox" data-perm="${tab}"${permRaw(st, tab) ? ' checked' : ''}> ${title}</label></legend>
+                <p class="muted perm-desc">${desc}</p>
+                ${Object.entries(items).map(([k, label]) => `<label class="check sub"><input type="checkbox" data-perm="${k}"${permOf(st, k) ? ' checked' : ''}${permRaw(st, tab) ? '' : ' disabled'}> ${label}</label>`).join('')}
+              </fieldset>`).join('')}
+            </div>
             <div class="actions"><button class="primary small" data-permsave>Simpan wewenang</button><button class="ghost small" data-permcancel>Batal</button></div>
           </div></td></tr>`);
         return;
@@ -1771,6 +1871,8 @@
     shownDay = d;
     const key = $('rangeSeg').querySelector('[aria-checked="true"]')?.dataset.range;
     if (key) range = rangeFor(key);   // rentang tanggal pilihan sendiri tidak diubah
+    const pkey = $('prodRangeSeg').querySelector('[aria-checked="true"]')?.dataset.range;
+    if (pkey) prodRange = rangeFor(pkey);
     recount = editOpening = false;
     if (role) { openTab(currentTab); refreshNotices(); }
   }

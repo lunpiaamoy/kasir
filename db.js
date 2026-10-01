@@ -7,13 +7,26 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 008, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 009, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
-  // Wewenang kasir dan bawaannya (sama dengan perm_defaults() di 008). Pemilik selalu boleh semua.
-  const PERM_DEFAULTS = { laporan: true, kontak: true, kontak_ubah: false, batal: true, ubah_nota: false, hapus_nota: false,
-    stok_masuk: true, koreksi_stok: false, produk: false, kas: true, kas_ubah: false };
-  const permsFor = (role, perms) => Object.fromEntries(Object.keys(PERM_DEFAULTS).map(k =>
-    [k, role === 'pemilik' || (typeof perms?.[k] === 'boolean' ? perms[k] : PERM_DEFAULTS[k])]));
+  // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
+  // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
+  const PERM_DEFAULTS = {
+    pesanan: true, batal: true, ubah_nota: false, hapus_nota: false,
+    stok: true, stok_masuk: true, stok_kurang: false, opname: false, produk_tambah: false, produk_ubah: false,
+    kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false,
+    laporan: true, laporan_unduh: true,
+    pembelian: false, pembelian_catat: false, pembelian_hapus: false, laba: false,
+    kontak: true, kontak_ubah: false, kontak_hapus: false };
+  const PERM_PARENT = {};
+  [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_kurang opname produk_tambah produk_ubah'],
+   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh'],
+   ['pembelian', 'pembelian_catat pembelian_hapus laba'], ['kontak', 'kontak_ubah kontak_hapus']]
+    .forEach(([tab, keys]) => keys.split(' ').forEach(k => (PERM_PARENT[k] = tab)));
+  const permsFor = (role, perms) => {
+    const on = k => typeof perms?.[k] === 'boolean' ? perms[k] : PERM_DEFAULTS[k];
+    return Object.fromEntries(Object.keys(PERM_DEFAULTS).map(k => [k, role === 'pemilik' || (on(k) && on(PERM_PARENT[k] || k))]));
+  };
   function fail(error) {
     if (!error) return;
     if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
@@ -65,7 +78,7 @@
       // Kalau 002_pembaruan.sql belum dijalankan, my_role belum ada: pakai is_staff (semua staf
       // dianggap pemilik, seperti sebelumnya) dan tandai needsUpdate supaya aplikasi memberi tahu.
       needsUpdate: false,
-      permDefaults: PERM_DEFAULTS,
+      permDefaults: PERM_DEFAULTS, permParent: PERM_PARENT,
       // Wewenang akun yang sedang masuk; sebelum 008 dijalankan: sesuai peran seperti dulu
       async myPerms(role) {
         const { data, error } = await sb.rpc('my_perms');
@@ -119,6 +132,10 @@
       },
       async updateOrder(id, payload) {
         const { data, error } = await sb.rpc('update_order', { p_id: id, p: payload }); fail(error); return data;
+      },
+      // Nomor nota yang terpakai di satu tahun (untuk mencari nomor yang terloncat)
+      async notaSeqs(year) {
+        return (await all(() => sb.from('orders').select('seq').eq('year', year).order('seq'))).map(r => r.seq);
       },
       // Semua pembeli yang pernah dicatat (untuk daftar kontak)
       async listCustomers() {
@@ -197,6 +214,7 @@
       async listCashOut(day) {
         const { data, error } = await sb.from('cash_out').select('*').eq('day', day).order('id'); fail(error); return data;
       },
+      async listCashOutFrom(fromDay) { return all(() => sb.from('cash_out').select('day, amount').gte('day', fromDay).order('id')); },
       async addCashOut(day, amount, note) {
         const { error } = await sb.from('cash_out').insert({ day, amount, note }); fail(error);
       },
@@ -302,7 +320,7 @@
       async signOut() { signedIn = false; },
       // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
       async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },
-      permDefaults: PERM_DEFAULTS,
+      permDefaults: PERM_DEFAULTS, permParent: PERM_PARENT,
       // Wewenang saat mencoba sebagai kasir diambil dari akun contoh di daftar staf
       async myPerms(role) { return permsFor(role, (load().staff || []).find(x => x.email === 'contoh@lunpia.local')?.perms); },
       async setStaffPerms(email, perms) {
@@ -384,6 +402,11 @@
         o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
         items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
         const ful = p.fulfillment || 'langsung';
+        const seq = Number(p.seq) || o.seq;
+        if (seq !== o.seq && db.orders.some(x => x.year === o.year && x.seq === seq))
+          throw new Error(`Nomor nota (${o.year}) ${String(seq).padStart(5, '0')} sudah dipakai`);
+        o.seq = seq;
+        db.counters ||= {}; db.counters[o.year] = db.orders.filter(x => x.year === o.year).reduce((m, x) => Math.max(m, x.seq), 0);
         Object.assign(o, {
           customer_name: p.customer_name || '', customer_wa: p.customer_wa || '',
           fulfillment: ful, fulfill_date: p.fulfill_date || null, fulfill_time: p.fulfill_time || null,
@@ -395,6 +418,7 @@
         });
         save(); return clone(o);
       },
+      async notaSeqs(year) { return load().orders.filter(o => o.year === year).map(o => o.seq).sort((a, b) => a - b); },
       async listOrders(fromIso, toIso) {
         return clone(load().orders.filter(o => o.created_at >= fromIso && o.created_at < toIso).reverse());
       },
@@ -416,7 +440,11 @@
       },
       async deleteOrder(id) {
         await this.cancelOrder(id);
-        const db = load(); db.orders = db.orders.filter(o => o.id !== id); save();
+        const db = load(), year = db.orders.find(o => o.id === id)?.year;
+        db.orders = db.orders.filter(o => o.id !== id);
+        // nota berikutnya melanjutkan dari nomor terakhir yang masih tercatat
+        if (year) (db.counters ||= {})[year] = db.orders.filter(o => o.year === year).reduce((m, o) => Math.max(m, o.seq), 0);
+        save();
       },
       async stockCard(productId, fromIso) {
         const db = load(), from = new Date(fromIso);
@@ -437,6 +465,7 @@
       },
       async updateCashDay(day, f) { const c = load().cash?.[day]; if (c) { Object.assign(c, f); save(); } },
       async listCashOut(day) { return clone((load().cashOut || []).filter(x => x.day === day)); },
+      async listCashOutFrom(fromDay) { return clone((load().cashOut || []).filter(x => x.day >= fromDay)); },
       async listStaff() { return clone(load().staff ||= [{ email: 'contoh@lunpia.local', name: 'Contoh', role: 'pemilik' }]); },
       async saveStaff(email, name, role) {
         const db = load(), list = db.staff ||= [{ email: 'contoh@lunpia.local', name: 'Contoh', role: 'pemilik' }];

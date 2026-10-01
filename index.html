@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
 
@@ -24,10 +24,11 @@
   </div>
   <nav class="tabs" aria-label="Menu">
     <button class="tab" data-tab="kasir" aria-current="page">Kasir</button>
-    <button class="tab" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
-    <button class="tab" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
+    <button class="tab need-pesanan" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
+    <button class="tab need-stok" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
     <button class="tab need-kas" data-tab="kas">Kas</button>
     <button class="tab need-laporan" data-tab="laporan">Laporan</button>
+    <button class="tab need-pembelian" data-tab="pembelian">Pembelian</button>
     <button class="tab need-kontak" data-tab="kontak">Kontak</button>
   </nav>
   <div class="who">
@@ -147,8 +148,8 @@
     <div class="view-head">
       <h2>Stok produk</h2>
       <div class="actions head-actions">
-        <button class="ghost small need-koreksi_stok" id="opnameBtn">Stok opname</button>
-        <button class="primary small need-produk" id="newProductBtn">Tambah produk</button>
+        <button class="ghost small need-opname" id="opnameBtn">Stok opname</button>
+        <button class="primary small need-produk_tambah" id="newProductBtn">Tambah produk</button>
       </div>
     </div>
     <p class="stock-summary" id="stockSummary"></p>
@@ -187,7 +188,13 @@
   <section class="view" id="view-kas" hidden>
     <section class="panel cash" id="cashPanel" aria-labelledby="cashTitle"></section>
     <section class="cash-history" aria-labelledby="cashHistoryTitle">
-      <div class="view-head"><h2 id="cashHistoryTitle">Riwayat kas 14 hari terakhir</h2></div>
+      <div class="view-head"><h2 id="cashHistoryTitle">Riwayat kas 31 hari terakhir</h2>
+        <div class="seg compact" id="cashViewSeg">
+          <button type="button" data-cv="day" aria-checked="true">Hari</button>
+          <button type="button" data-cv="week" aria-checked="false">Minggu</button>
+          <button type="button" data-cv="month" aria-checked="false">Bulan</button>
+          <button type="button" data-cv="year" aria-checked="false">Tahun</button>
+        </div></div>
       <div class="table-wrap"><table class="table" id="cashHistory"></table></div>
     </section>
   </section>
@@ -217,12 +224,56 @@
     </section>
   </section>
 
+  <!-- ============ Pembelian bahan & produksi ============ -->
+  <section class="view" id="view-pembelian" hidden>
+    <div class="view-head">
+      <h2>Pembelian bahan &amp; produksi</h2>
+      <button class="primary small need-pembelian_catat" id="prodAddBtn">+ Catat pembelian &amp; produksi</button>
+    </div>
+    <div class="range">
+      <div class="seg compact" id="prodRangeSeg">
+        <button type="button" data-range="today" aria-checked="false">Hari ini</button>
+        <button type="button" data-range="yesterday" aria-checked="false">Kemarin</button>
+        <button type="button" data-range="7d" aria-checked="false">7 hari</button>
+        <button type="button" data-range="month" aria-checked="true">Bulan ini</button>
+        <button type="button" data-range="year" aria-checked="false">Tahun ini</button>
+        <button type="button" data-range="lastyear" aria-checked="false">Tahun lalu</button>
+      </div>
+      <div class="range-custom">
+        <input type="date" id="pFrom" aria-label="Dari tanggal">
+        <span>–</span>
+        <input type="date" id="pTo" aria-label="Sampai tanggal">
+        <button class="ghost small" id="pApply">Tampilkan</button>
+      </div>
+    </div>
+    <p class="muted hint">Catat belanja bahan (kulit, telur, rebung, ayam, udang, …), berapa pcs yang jadi, dan sisa bahannya.
+      Sisa bahan dibawa ke catatan berikutnya; biayanya dihitung saat terpakai.</p>
+    <div id="prodForm" hidden></div>
+    <div class="metrics" id="prodMetrics"></div>
+    <section class="panel prod-sec">
+      <h3>1. Pembelian bahan</h3>
+      <div class="table-wrap"><table class="table" id="prodBuyTable"></table></div>
+    </section>
+    <section class="panel prod-sec">
+      <h3>2. Produksi</h3>
+      <div class="table-wrap"><table class="table" id="prodOutTable"></table></div>
+    </section>
+    <section class="panel prod-sec">
+      <h3>3. Sisa bahan sekarang</h3>
+      <div class="table-wrap"><table class="table" id="prodLeftTable"></table></div>
+    </section>
+    <section class="panel prod-sec">
+      <h3>Catatan per tanggal</h3>
+      <div class="table-wrap"><table class="table" id="prodTable"></table></div>
+    </section>
+  </section>
+
   <!-- ============ Laporan ============ -->
   <section class="view" id="view-laporan" hidden>
 
     <div class="view-head">
       <h2>Laporan penjualan</h2>
-      <button class="ghost small" id="exportBtn">Unduh Excel (CSV)</button>
+      <button class="ghost small need-laporan_unduh" id="exportBtn">Unduh Excel (CSV)</button>
     </div>
     <div class="range">
       <div class="seg compact" id="rangeSeg">
@@ -261,29 +312,6 @@
         <div class="table-wrap"><table class="table" id="dailyTable"></table></div>
       </div>
     </div>
-
-    <section class="panel owner-only prod-panel" aria-labelledby="prodTitle">
-      <div class="view-head">
-        <h3 id="prodTitle">Pembelian bahan &amp; produksi</h3>
-        <button class="primary small" id="prodAddBtn">+ Catat pembelian &amp; produksi</button>
-      </div>
-      <p class="muted hint">Catat belanja bahan (kulit, telur, rebung, ayam, udang, …), sisanya, dan berapa pcs yang jadi.
-        Sisa bahan tidak dihitung sebagai biaya. Laba = penjualan − bahan terpakai.</p>
-      <div id="prodForm" hidden></div>
-      <div class="metrics" id="prodMetrics"></div>
-      <div class="report-grid">
-        <div>
-          <h3>Hasil produksi</h3>
-          <div class="table-wrap"><table class="table" id="prodOutTable"></table></div>
-        </div>
-        <div>
-          <h3>Pembelian bahan</h3>
-          <div class="table-wrap"><table class="table" id="prodBuyTable"></table></div>
-        </div>
-      </div>
-      <h3>Catatan per tanggal</h3>
-      <div class="table-wrap"><table class="table" id="prodTable"></table></div>
-    </section>
   </section>
 </main>
 
@@ -333,9 +361,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=30"></script>
-<script src="db.js?v=30"></script>
-<script src="app.js?v=30"></script>
+<script src="config.js?v=31"></script>
+<script src="db.js?v=31"></script>
+<script src="app.js?v=31"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
