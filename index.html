@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
 
@@ -26,9 +26,9 @@
     <button class="tab" data-tab="kasir" aria-current="page">Kasir</button>
     <button class="tab" data-tab="pesanan">Pesanan <span class="count" id="pendingCount" hidden></span></button>
     <button class="tab" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
-    <button class="tab" data-tab="kas">Kas</button>
-    <button class="tab" data-tab="laporan">Laporan</button>
-    <button class="tab" data-tab="kontak">Kontak</button>
+    <button class="tab need-kas" data-tab="kas">Kas</button>
+    <button class="tab need-laporan" data-tab="laporan">Laporan</button>
+    <button class="tab need-kontak" data-tab="kontak">Kontak</button>
   </nav>
   <div class="who">
     <span id="whoEmail"></span>
@@ -147,8 +147,8 @@
     <div class="view-head">
       <h2>Stok produk</h2>
       <div class="actions head-actions">
-        <button class="ghost small owner-only" id="opnameBtn">Stok opname</button>
-        <button class="primary small owner-only" id="newProductBtn">Tambah produk</button>
+        <button class="ghost small need-koreksi_stok" id="opnameBtn">Stok opname</button>
+        <button class="primary small need-produk" id="newProductBtn">Tambah produk</button>
       </div>
     </div>
     <p class="stock-summary" id="stockSummary"></p>
@@ -333,9 +333,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=29"></script>
-<script src="db.js?v=29"></script>
-<script src="app.js?v=29"></script>
+<script src="config.js?v=30"></script>
+<script src="db.js?v=30"></script>
+<script src="app.js?v=30"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

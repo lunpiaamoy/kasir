@@ -98,6 +98,8 @@
     try {
       role = await DB.myRole();
       document.body.classList.toggle('is-owner', role === 'pemilik');
+      perms = role ? await DB.myPerms(role) : {};
+      applyPerms();
       $('whoEmail').textContent = `${session.user?.email || ''}${role ? ' · ' + (role === 'pemilik' ? 'Pemilik' : 'Kasir') : ''}`;
       if (!role) {
         $('catalog').innerHTML = `<div class="empty-state">Akun <b>${esc(session.user?.email)}</b> belum terdaftar sebagai staf. Minta pemilik toko menambahkan email ini di tabel <b>staff</b> di Supabase.</div>`;
@@ -107,8 +109,18 @@
       refreshPendingCount();
     } catch (e) { toast(e.message, true); }
   }
-  let role = null;
+  let role = null, perms = {};
   const isOwner = () => role === 'pemilik';
+  // Wewenang per staf (diatur pemilik di Pengaturan → Staf). Elemen dengan kelas need-<wewenang>
+  // disembunyikan kalau akun tidak punya wewenang itu; database juga menolaknya.
+  const can = k => isOwner() || !!perms[k];
+  function applyPerms() {
+    Object.keys(DB.permDefaults).forEach(k => document.body.classList.toggle('can-' + k, can(k)));
+    document.body.classList.toggle('can-stok_ubah', can('stok_masuk') || can('koreksi_stok'));
+    // Tab yang sedang terbuka tidak boleh lagi → kembali ke Kasir
+    const tab = document.querySelector(`.tab[data-tab="${currentTab}"]`);
+    if (tab && getComputedStyle(tab).display === 'none') openTab('kasir');
+  }
 
   $('loginForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -118,7 +130,9 @@
     finally { $('loginBtn').disabled = false; }
   });
   $('logoutBtn').addEventListener('click', async () => {
-    await DB.signOut(); appShown = false; role = null; document.body.classList.remove('is-owner'); resetCart(); showLogin();
+    await DB.signOut(); appShown = false; role = null; perms = {}; document.body.classList.remove('is-owner');
+    document.body.className = document.body.className.replace(/\bcan-\S+/g, '').trim();
+    resetCart(); showLogin();
   });
   $('resetDemoBtn').addEventListener('click', async () => { DB.resetDemo(); cart.clear(); await loadProducts(); refreshPendingCount(); toast('Data contoh dikosongkan'); });
 
@@ -549,9 +563,9 @@
                 <button class="primary small" data-done="${o.id}">Tandai selesai</button>
                 ${o.customer_wa ? waTextLink(o.customer_wa, reminderText(o), 'ghost small btn-link', 'Ingatkan via WA') : ''}
                 <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
-                <button class="ghost small danger" data-cancel="${o.id}">Batalkan</button>
-                <button class="ghost small owner-only" data-editorder="${o.id}">Ubah</button>
-                <button class="ghost small danger owner-only" data-del="${o.id}">Hapus</button>
+                <button class="ghost small danger need-batal" data-cancel="${o.id}">Batalkan</button>
+                <button class="ghost small need-ubah_nota" data-editorder="${o.id}">Ubah</button>
+                <button class="ghost small danger need-hapus_nota" data-del="${o.id}">Hapus</button>
               </div>
             </article>`;
           }).join('')}</div>
@@ -575,8 +589,8 @@
           <td>${statusChip(o.status)}</td>
           <td><div class="add-stock" data-actions>
             <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
-            ${o.status === 'batal' ? '' : `<button class="ghost small owner-only" data-editorder="${o.id}">Ubah</button>`}
-            <button class="ghost small danger owner-only" data-del="${o.id}">Hapus</button>
+            ${o.status === 'batal' ? '' : `<button class="ghost small need-ubah_nota" data-editorder="${o.id}">Ubah</button>`}
+            <button class="ghost small danger need-hapus_nota" data-del="${o.id}">Hapus</button>
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="9">Belum ada transaksi.</td></tr>'}</tbody>`;
@@ -647,8 +661,8 @@
           <td><div class="add-stock">
             <button class="primary small" data-neworder="${i}">Pesan baru</button>
             ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
-            <button class="ghost small owner-only" data-contactedit="${i}">Ubah</button>
-            <button class="ghost small danger owner-only" data-contactdel="${i}">Hapus</button>
+            <button class="ghost small need-kontak_ubah" data-contactedit="${i}">Ubah</button>
+            <button class="ghost small danger need-kontak_ubah" data-contactdel="${i}">Hapus</button>
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -717,13 +731,13 @@
           <td class="num">${rp(p.price)}</td>
           <td class="num stock-num">${p.stock}</td>
           <td data-sort="${p.stock - p.min_stock}">${stockChip(p)} <span class="muted">min ${p.min_stock}</span></td>
-          <td><div class="add-stock">
+          <td><div class="add-stock need-stok_ubah">
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
           </div></td>
           <td><div class="add-stock">
             <button class="ghost small" data-card="${p.id}">Kartu stok</button>
-            <button class="ghost small owner-only" data-edit="${p.id}">Ubah</button>
+            <button class="ghost small need-produk" data-edit="${p.id}">Ubah</button>
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="7">Belum ada produk.</td></tr>'}</tbody>`;
   }
@@ -735,7 +749,8 @@
       const raw = $('add-' + id).value.trim();
       const n = (raw.startsWith('-') ? -1 : 1) * toInt(raw);
       if (!n) return toast('Isi jumlah stok yang mau ditambahkan', true);
-      if (n < 0 && !isOwner()) return toast('Hanya pemilik yang bisa mengurangi stok', true);
+      if (n < 0 && !can('koreksi_stok')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
+      if (n > 0 && !can('stok_masuk')) return toast('Akun ini tidak punya wewenang menambah stok', true);
       try { await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok'); toast(`Stok ${byId(id).name} ${n > 0 ? '+' : ''}${n}`); loadProducts(); }
       catch (err) { toast(err.message, true); }
     }
@@ -1223,11 +1238,11 @@
     if (c.outErr) return `<p class="error">${esc(c.outErr)}</p>`;
     if (!c.out.length) return '<p class="muted">Belum ada kas keluar hari ini.</p>';
     return `<div class="table-wrap"><table class="table">
-      <thead><tr><th>Jam</th><th>Keterangan</th><th class="num">Jumlah</th><th>Oleh</th><th class="owner-only"></th></tr></thead>
+      <thead><tr><th>Jam</th><th>Keterangan</th><th class="num">Jumlah</th><th>Oleh</th><th class="need-kas_ubah"></th></tr></thead>
       <tbody>${c.out.map(x => { const t = new Date(x.created_at); return `<tr>
         <td>${pad(t.getHours())}.${pad(t.getMinutes())}</td><td>${esc(x.note || '-')}</td>
         <td class="num">${rp(x.amount)}</td><td class="muted">${esc((x.created_by || '').split('@')[0])}</td>
-        <td class="owner-only"><button class="ghost small danger" data-cashout-del="${x.id}">Hapus</button></td>
+        <td class="need-kas_ubah"><button class="ghost small danger" data-cashout-del="${x.id}">Hapus</button></td>
       </tr>`; }).join('')}</tbody></table></div>`;
   }
   function cashOutSection(c, closed) {
@@ -1271,7 +1286,7 @@
     let c;
     try { c = await cashToday(); } catch (e) { $('cashPanel').innerHTML = `<p class="error">${esc(e.message)}</p>`; return; }
     const { cd } = c;
-    const resetLink = isOwner() ? '<p class="cash-reset"><button class="link danger" data-cash-reset>Mulai ulang kas hari ini</button></p>' : '';
+    const resetLink = can('kas_ubah') ? '<p class="cash-reset"><button class="link danger" data-cash-reset>Mulai ulang kas hari ini</button></p>' : '';
     const head = `<div class="view-head"><h2 id="cashTitle">Kas hari ini</h2><span class="muted">${esc(longDate(new Date()))}</span></div>`;
     cashMode = !cd || editOpening ? 'open' : cd.closed_at && !recount ? 'closed' : 'count';
     if (!cd || editOpening) {
@@ -1290,7 +1305,7 @@
       $('cashPanel').innerHTML = `${head}${figures}
         ${cd.counted_detail ? `<p class="muted">Rincian hitungan: ${esc(denomSummary(cd.counted_detail))}</p>` : ''}
         <p class="muted">Kasir ditutup pukul ${pad(t.getHours())}.${pad(t.getMinutes())} oleh ${esc((cd.closed_by || '').split('@')[0])}${cd.note ? ' · ' + esc(cd.note) : ''}
-        ${isOwner() ? ' · <button class="link" data-cash-recount>Hitung ulang</button>' : ''}</p>${resetLink}`;
+        ${can('kas_ubah') ? ' · <button class="link" data-cash-recount>Hitung ulang</button>' : ''}</p>${resetLink}`;
       return;
     }
     $('cashPanel').innerHTML = `${head}${figures}
@@ -1347,7 +1362,7 @@
     const who = e => esc((e || '').split('@')[0]);
     cashRows = new Map(days.map(c => [c.day, c]));
     $('cashHistory').innerHTML = `
-      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th><th class="owner-only"></th></tr></thead>
+      <thead><tr><th>Tanggal</th><th class="num">Uang awal</th><th class="num">Seharusnya</th><th class="num">Dihitung</th><th>Selisih</th><th>Ditutup oleh</th><th>Catatan</th><th class="need-kas_ubah"></th></tr></thead>
       <tbody>${days.length ? days.map(c => {
         const d = c.closed_at ? c.counted - c.expected : null;
         return `<tr data-day="${esc(c.day)}">
@@ -1358,7 +1373,7 @@
           <td data-sort="${d ?? ''}">${d == null ? '<span class="chip plain">Belum ditutup</span>' : d === 0 ? '<span class="chip ok">Pas</span>' : d > 0 ? `<span class="chip warn">Lebih ${rp(d)}</span>` : `<span class="chip bad">Kurang ${rp(-d)}</span>`}</td>
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
-          <td class="owner-only"><div class="add-stock">
+          <td class="need-kas_ubah"><div class="add-stock">
             <button class="ghost small" data-cashedit="${esc(c.day)}">Ubah</button>
             <button class="ghost small danger" data-cashdel="${esc(c.day)}">Hapus</button>
           </div></td>
@@ -1453,7 +1468,7 @@
     const nTomorrow = pending.filter(o => o.fulfill_date === tomorrow).length;
     const items = [];
     if (DB.needsUpdate) items.push(`<div class="notice bad"><b>Database belum diperbarui.</b> Aplikasi berjalan dengan cara lama: semua staf dianggap pemilik, dan kas harian, stok opname, serta ubah/hapus nota belum bisa dipakai. Jalankan file <b>supabase/002_pembaruan.sql</b> di Supabase (SQL Editor → Run), lalu muat ulang halaman ini.</div>`);
-    if (cd === null) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
+    if (cd === null && can('kas')) items.push(`<div class="notice warn">Uang awal hari ini belum diisi. <button class="link" data-goto="kas">Isi sekarang</button></div>`);
     if (late) items.push(`<div class="notice bad"><b>${late} pesanan terlewat</b> belum diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     if (nToday || nTomorrow) items.push(`<div class="notice">${[nToday && `<b>${nToday} pesanan hari ini</b>`, nTomorrow && `<b>${nTomorrow} pesanan besok</b>`].filter(Boolean).join(' · ')} untuk diambil/dikirim. <button class="link" data-goto="pesanan">Lihat</button></div>`);
     $('kasirNotices').innerHTML = items.join('');
@@ -1624,15 +1639,26 @@
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
     <option value="kasir"${r === 'kasir' ? ' selected' : ''}>Kasir</option>
     <option value="pemilik"${r === 'pemilik' ? ' selected' : ''}>Pemilik</option></select>`;
+  const PERM_GROUPS = [
+    ['Nota & pesanan', { batal: 'Batalkan pesanan', ubah_nota: 'Ubah nota', hapus_nota: 'Hapus nota' }],
+    ['Stok & produk', { stok_masuk: 'Tambah stok masuk', koreksi_stok: 'Kurangi stok & stok opname', produk: 'Tambah/ubah produk & harga' }],
+    ['Kas', { kas: 'Buka kas, tutup kasir, catat kas keluar', kas_ubah: 'Ubah kas yang sudah ditutup, hapus riwayat & kas keluar' }],
+    ['Laporan & kontak', { laporan: 'Lihat Laporan (omzet & grafik)', kontak: 'Lihat Kontak pembeli', kontak_ubah: 'Ubah & hapus kontak' }],
+  ];
+  const permOf = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
+  let staffList = [];
   async function renderStaff() {
     let list;
-    try { list = await DB.listStaff(); } catch (e) { $('staffTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
+    try { list = staffList = await DB.listStaff(); } catch (e) { $('staffTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
     $('staffTable').innerHTML = `<thead><tr><th>Email</th><th>Nama</th><th>Peran</th><th></th></tr></thead><tbody>
       ${list.map(st => `<tr data-email="${esc(st.email)}">
         <td>${esc(st.email)}</td>
         <td><input data-f="name" value="${esc(st.name || '')}" aria-label="Nama"></td>
-        <td>${roleSelect(st.role)}</td>
+        <td>${roleSelect(st.role)}
+          <div class="muted perm-sum">${st.role === 'pemilik' ? 'Semua wewenang'
+            : `${Object.keys(DB.permDefaults).filter(k => permOf(st, k)).length} dari ${Object.keys(DB.permDefaults).length} wewenang`}</div></td>
         <td><div class="add-stock"><button class="ghost small" data-staffsave>Simpan</button>
+          ${st.role === 'pemilik' ? '' : '<button class="ghost small" data-staffperm>Wewenang</button>'}
           <button class="ghost small" data-staffpw>Password</button>
           <button class="ghost small danger" data-staffdel>Hapus</button></div></td>
       </tr>`).join('')}
@@ -1659,6 +1685,27 @@
         return;
       }
       if ('pwcancel' in b.dataset) return row.remove();
+      if ('staffperm' in b.dataset) {
+        $('staffTable').querySelector('.perm-row')?.remove();
+        const st = staffList.find(x => x.email === row.dataset.email);
+        row.insertAdjacentHTML('afterend', `<tr class="perm-row" data-email="${esc(st.email)}"><td colspan="4">
+          <div class="perm-edit"><b>Wewenang ${esc(st.name || st.email)}</b>
+            <p class="muted hint">Yang tidak dicentang disembunyikan dari akun ini dan ditolak oleh database. Transaksi kasir, cetak/kirim nota, dan tandai pesanan selesai selalu boleh.</p>
+            <div class="perm-groups">${PERM_GROUPS.map(([title, items]) => `<fieldset><legend>${title}</legend>
+              ${Object.entries(items).map(([k, label]) => `<label class="check"><input type="checkbox" data-perm="${k}"${permOf(st, k) ? ' checked' : ''}> ${label}</label>`).join('')}
+            </fieldset>`).join('')}</div>
+            <div class="actions"><button class="primary small" data-permsave>Simpan wewenang</button><button class="ghost small" data-permcancel>Batal</button></div>
+          </div></td></tr>`);
+        return;
+      }
+      if ('permcancel' in b.dataset) return row.remove();
+      if ('permsave' in b.dataset) {
+        const p = Object.fromEntries([...row.querySelectorAll('[data-perm]')].map(i => [i.dataset.perm, i.checked]));
+        b.disabled = true;
+        try { await DB.setStaffPerms(row.dataset.email, p); } finally { b.disabled = false; }
+        toast(`Wewenang ${row.dataset.email} disimpan. Berlaku setelah akun itu memuat ulang halaman.`);
+        return renderStaff();
+      }
       if ('pwsave' in b.dataset) {
         const pw = row.querySelector('[data-f="pw1"]').value;
         if (pw.length < 6) return toast('Password minimal 6 karakter', true);
