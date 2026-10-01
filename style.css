@@ -129,18 +129,33 @@ textarea { width: 100%; font: inherit; padding: 9px 11px; border-radius: 8px; bo
 /* Tombol khusus pemilik: disembunyikan untuk kasir (database juga menolaknya) */
 body:not(.is-owner) .owner-only { display: none !important; }
 /* Wewenang per staf (lihat applyPerms di app.js) */
-body:not(.can-laporan) .need-laporan { display: none !important; }
-body:not(.can-kontak) .need-kontak { display: none !important; }
-body:not(.can-kontak_ubah) .need-kontak_ubah { display: none !important; }
+body:not(.can-pesanan) .need-pesanan { display: none !important; }
 body:not(.can-batal) .need-batal { display: none !important; }
 body:not(.can-ubah_nota) .need-ubah_nota { display: none !important; }
 body:not(.can-hapus_nota) .need-hapus_nota { display: none !important; }
+body:not(.can-stok) .need-stok { display: none !important; }
 body:not(.can-stok_masuk) .need-stok_masuk { display: none !important; }
-body:not(.can-koreksi_stok) .need-koreksi_stok { display: none !important; }
-body:not(.can-produk) .need-produk { display: none !important; }
+body:not(.can-stok_kurang) .need-stok_kurang { display: none !important; }
+body:not(.can-opname) .need-opname { display: none !important; }
+body:not(.can-produk_tambah) .need-produk_tambah { display: none !important; }
+body:not(.can-produk_ubah) .need-produk_ubah { display: none !important; }
 body:not(.can-kas) .need-kas { display: none !important; }
+body:not(.can-kas_buka) .need-kas_buka { display: none !important; }
+body:not(.can-kas_tutup) .need-kas_tutup { display: none !important; }
+body:not(.can-kas_keluar) .need-kas_keluar { display: none !important; }
 body:not(.can-kas_ubah) .need-kas_ubah { display: none !important; }
+body:not(.can-kas_hapus) .need-kas_hapus { display: none !important; }
+body:not(.can-laporan) .need-laporan { display: none !important; }
+body:not(.can-laporan_unduh) .need-laporan_unduh { display: none !important; }
+body:not(.can-pembelian) .need-pembelian { display: none !important; }
+body:not(.can-pembelian_catat) .need-pembelian_catat { display: none !important; }
+body:not(.can-pembelian_hapus) .need-pembelian_hapus { display: none !important; }
+body:not(.can-laba) .need-laba { display: none !important; }
+body:not(.can-kontak) .need-kontak { display: none !important; }
+body:not(.can-kontak_ubah) .need-kontak_ubah { display: none !important; }
+body:not(.can-kontak_hapus) .need-kontak_hapus { display: none !important; }
 body:not(.can-stok_ubah) .need-stok_ubah { display: none !important; }
+body:not(.can-kas_ubah_hapus) .need-kas_ubah_hapus { display: none !important; }
 
 /* ---------- Pengingat & kas ---------- */
 .notices { display: flex; flex-direction: column; gap: 8px; }
@@ -447,10 +462,8 @@ select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid
 #view-pengaturan input.short { max-width: 140px; }
 #view-pengaturan .num-in { text-align: right; }
 .new-row td { background: var(--ground); }
-.prod-panel { margin-top: 24px; }
-.prod-panel .view-head { margin-bottom: 4px; }
-.prod-panel h3 { margin: 14px 0 8px; }
-.prod-panel .view-head h3 { margin: 0; }
+.prod-sec { margin-bottom: 16px; }
+.prod-sec h3 { margin: 0 0 10px; }
 #prodForm { margin: 8px 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--ground); }
 .prod-edit { display: flex; flex-direction: column; gap: 8px; }
 .prod-edit h4 { margin: 10px 0 0; }
@@ -484,3 +497,11 @@ h3.sub { margin-top: 18px; }
 .perm-groups legend { font-weight: 700; font-size: 13px; padding: 0 4px; }
 .perm-groups .check { font-size: 14px; align-items: flex-start; }
 .perm-groups .check input { margin-top: 3px; }
+.perm-groups legend .check { font-size: 14px; font-weight: 700; }
+.perm-groups .check.sub { padding-left: 24px; }
+.perm-groups .perm-desc, .perm-groups .perm-always { font-size: 12px; margin: -2px 0 2px; }
+.perm-groups fieldset.off .sub { opacity: .45; }
+.seq-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.seq-edit label { margin: 0; font-weight: 700; }
+.seq-edit input { width: 110px; font-variant-numeric: tabular-nums; }
+.seq-edit .muted { font-size: 13px; }
