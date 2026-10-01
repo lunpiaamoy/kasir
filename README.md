@@ -7,10 +7,10 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 - **Kasir**: pilih produk per jenis (Lunpia Basah, Goreng, Frozen, Ngoyang), isi nama, WA, dan catatan pembeli, pilih **Langsung / Ambil nanti / Kirim**, bayar **Tunai** (dengan kembalian) atau **QRIS**, lalu cetak struk atau kirim **nota lewat WhatsApp**: chat pembeli terbuka dengan isi nota sudah terketik, tinggal tekan Enter (di laptop lewat tab WhatsApp Web baru, di HP langsung aplikasi WhatsApp). Di atas halaman kasir muncul pengingat: uang awal belum diisi, pesanan terlewat, dan pesanan hari ini/besok.
 - **Struk thermal 58 mm** mengikuti format nota toko: nomor nota berurutan per tahun, misalnya `(2026) 00001`, dan tidak pernah dipakai ulang walaupun nota dihapus. Ongkir dicatat terpisah dan tidak masuk total.
 - **Pesanan**: daftar pesanan yang akan diambil atau dikirim, dikelompokkan per tanggal, dengan tanda "Hari ini" dan "Terlewat". Pesanan bisa ditandai selesai, dicetak ulang, atau dibatalkan (stok dikembalikan). Pemilik juga bisa **mengubah** dan **menghapus** nota.
-- **Pengaturan** (pemilik, tombol di bilah atas): kelola **staf** (tambah kasir, ganti peran, hapus), **bahan baku & resep** untuk menghitung **HPP** per produk (atau isi HPP manual), dan **unduh cadangan semua data**. Laporan menampilkan **HPP & laba kotor** untuk pemilik.
+- **Pengaturan** (tombol di bilah atas): semua akun bisa **ubah password**. Pemilik juga mengelola **staf** (tambah kasir, ganti peran, hapus), **unduh cadangan semua data**, dan **pulihkan dari cadangan** (data di file yang tidak ada di kasir ditambahkan kembali; data yang ada tidak diubah atau dihapus; daftar staf tidak ikut).
 - **Kontak**: daftar pembeli yang disusun otomatis dari nama & nomor WA di transaksi (satu kontak per nomor), lengkap dengan jumlah transaksi, total belanja, dan tanggal terakhir beli. Bisa dicari, diurutkan, dan tombol **Pesan baru** langsung mengisi nama & WA di kasir, dan tombol **WhatsApp** membuka chat pembeli dengan salam "Hai Kak {nama}.".
 - **Stok**: tambah stok, koreksi stok, **stok opname** (isi hitungan fisik, lihat selisihnya, lalu stok sistem disamakan), tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
-- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, **jam ramai** (transaksi per jam dengan tanda Ramai/Sepi), tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**.
+- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, **jam ramai** (transaksi per jam dengan tanda Ramai/Sepi), tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**. Khusus pemilik: **Pembelian bahan & produksi**, catat belanja bahan (kulit, telur, rebung, ayam, udang, …) dengan harga dan sisanya, serta berapa pcs tiap produk yang jadi. Laporan menghitung bahan terpakai (sisa tidak dihitung sebagai biaya), biaya bahan per pcs, hasil produksi vs terjual, dan **laba = penjualan − bahan terpakai**.
 - **Kas** (tab tersendiri): isi uang awal saat buka dan hitung uang di laci saat **tutup kasir**, keduanya **per pecahan** (100.000 sampai 1.000; koin ratusan tidak dihitung). Catat **kas keluar** (beli bahan, bensin, bayar kurir) supaya selisih jujur. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai + ongkir yang dibayar tunai − kas keluar) dan selisihnya. **Riwayat kas 14 hari** menampilkan selisih setiap hari.
 
 ## Pemilik dan kasir
@@ -26,6 +26,9 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 | Koreksi stok (mengurangi) dan stok opname | ✅ | ❌ |
 | Mengubah kas yang sudah ditutup, ubah/hapus riwayat kas | ✅ | ❌ |
 | Ubah/hapus kontak | ✅ | ❌ |
+| Pembelian bahan & produksi, laba | ✅ | ❌ |
+| Staf, cadangan & pulihkan data | ✅ | ❌ |
+| Ubah password akun sendiri | ✅ | ✅ |
 
 Batasan ini dipasang di database, bukan hanya dengan menyembunyikan tombol.
 
@@ -41,7 +44,7 @@ Kalau `config.js` belum diisi, aplikasi berjalan dalam **mode contoh**: data han
    ```sql
    insert into public.staff (email, name) values ('email-kamu@gmail.com', 'Nama');
    ```
-4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql), [`supabase/004_ubah_hapus_kas_kontak.sql`](supabase/004_ubah_hapus_kas_kontak.sql), dan [`supabase/005_alamat_kas_keluar_staf_hpp.sql`](supabase/005_alamat_kas_keluar_staf_hpp.sql), dengan cara yang sama (kosongkan editor, tempel seluruh isi file, pastikan tidak ada teks yang terpilih, lalu Run). Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
+4. Jalankan juga seluruh isi [`supabase/002_pembaruan.sql`](supabase/002_pembaruan.sql), lalu [`supabase/003_pecahan_kas.sql`](supabase/003_pecahan_kas.sql), [`supabase/004_ubah_hapus_kas_kontak.sql`](supabase/004_ubah_hapus_kas_kontak.sql), [`supabase/005_alamat_kas_keluar_staf_hpp.sql`](supabase/005_alamat_kas_keluar_staf_hpp.sql), dan [`supabase/006_pembelian_produksi.sql`](supabase/006_pembelian_produksi.sql), dengan cara yang sama (kosongkan editor, tempel seluruh isi file, pastikan tidak ada teks yang terpilih, lalu Run). Staf yang sudah terdaftar saat file 002 dijalankan menjadi **pemilik**.
 5. Buat akun login untuk setiap staf di **Authentication → Users → Add user → Create new user**, dengan email yang sama dan centang **Auto Confirm User**.
 6. Matikan pendaftaran umum di **Authentication → Sign In / Providers**: nonaktifkan **Allow new users to sign up**. Kalau tersedia di paket Anda, nyalakan juga **Leaked password protection**.
 7. Salin **Project URL** dan **anon / publishable key** dari **Project Settings → API** ke `config.js`.

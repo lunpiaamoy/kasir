@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002, 003, 004) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 006, yang belum) di Supabase (SQL Editor → Run).';
   function fail(error) {
     if (!error) return;
     if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
@@ -151,24 +151,32 @@
       async listStaff() { const { data, error } = await sb.from('staff').select('*').order('role').order('email'); fail(error); return data; },
       async saveStaff(email, name, role) { const { error } = await sb.rpc('save_staff', { p_email: email, p_name: name, p_role: role }); fail(error); },
       async deleteStaff(email) { const { error } = await sb.rpc('delete_staff', { p_email: email }); fail(error); },
-      async listIngredients() { const { data, error } = await sb.from('ingredients').select('*').order('name'); fail(error); return data; },
-      async saveIngredient(x) {
-        const row = { name: x.name, unit: x.unit, price: x.price, updated_at: new Date().toISOString() };
-        const { error } = await (x.id ? sb.from('ingredients').update(row).eq('id', x.id) : sb.from('ingredients').insert(row)); fail(error);
+      // Pembelian bahan & hasil produksi (pemilik, 006)
+      async listProductions(fromDay, toDay) {
+        return all(() => sb.from('productions').select('*').gte('day', fromDay).lte('day', toDay).order('day', { ascending: false }).order('id', { ascending: false }));
       },
-      async deleteIngredient(id) { const { error } = await sb.from('ingredients').delete().eq('id', id); fail(error); },
-      async listRecipes() { const { data, error } = await sb.from('recipes').select('*'); fail(error); return data; },
-      // Resep satu produk diganti seluruhnya; cost = HPP manual (dipakai kalau resep kosong)
-      async saveRecipe(productId, rows, cost) {
-        let r = await sb.from('recipes').delete().eq('product_id', productId); fail(r.error);
-        if (rows.length) { r = await sb.from('recipes').insert(rows.map(x => ({ product_id: productId, ...x }))); fail(r.error); }
-        r = await sb.from('products').update({ cost }).eq('id', productId); fail(r.error);
+      async saveProduction(x) {
+        const row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note };
+        const { error } = await (x.id ? sb.from('productions').update(row).eq('id', x.id) : sb.from('productions').insert(row)); fail(error);
+      },
+      async deleteProduction(id) { const { error } = await sb.from('productions').delete().eq('id', id); fail(error); },
+      async changePassword(password) {
+        const { error } = await sb.auth.updateUser({ password });
+        if (!error) return;
+        if (error.code === 'same_password') throw new Error('Password baru sama dengan password lama.');
+        if (error.code === 'weak_password') throw new Error('Password terlalu lemah. Pakai minimal 6 karakter (campur huruf dan angka).');
+        if (error.code === 'reauthentication_needed') throw new Error('Demi keamanan, keluar lalu masuk lagi, kemudian ulangi ubah password.');
+        throw new Error('Gagal mengubah password: ' + error.message);
+      },
+      // Pulihkan: data di file yang belum ada di database ditambahkan (006); data yang ada tidak diubah
+      async restore(data) {
+        const { data: res, error } = await sb.rpc('restore_backup', { d: data }); fail(error); return res;
       },
       // Cadangan: semua tabel yang bisa dibaca pemilik
       async backup() {
         const out = {};
         const tables = { products: '*', orders: '*, order_items(*)', stock_moves: '*', cash_days: '*', cash_out: '*',
-          staff: '*', ingredients: '*', recipes: '*', hidden_contacts: '*' };
+          productions: '*', staff: '*', hidden_contacts: '*' };
         for (const [t, cols] of Object.entries(tables)) {
           try { out[t] = await all(() => sb.from(t).select(cols)); } catch (e) { out[t] = { error: e.message }; }
         }
@@ -415,22 +423,24 @@
         if (e === 'contoh@lunpia.local') throw new Error('Tidak bisa menghapus akun sendiri');
         db.staff = (db.staff || []).filter(x => x.email !== e); save();
       },
-      async listIngredients() { return clone(load().ingredients || []).sort((a, b) => a.name.localeCompare(b.name)); },
-      async saveIngredient(x) {
-        const db = load(), list = db.ingredients ||= [];
-        if (x.id) Object.assign(list.find(i => i.id === x.id), { name: x.name, unit: x.unit, price: x.price });
-        else list.push({ id: db.nextId++, name: x.name, unit: x.unit, price: x.price });
+      async listProductions(fromDay, toDay) {
+        return clone((load().productions || []).filter(x => x.day >= fromDay && x.day <= toDay)
+          .sort((a, b) => b.day.localeCompare(a.day) || b.id - a.id));
+      },
+      async saveProduction(x) {
+        const db = load(), list = db.productions ||= [], row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note };
+        if (x.id) Object.assign(list.find(p => p.id === x.id), row);
+        else list.push({ id: db.nextId++, ...row, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
       },
-      async deleteIngredient(id) {
-        const db = load(); db.ingredients = (db.ingredients || []).filter(i => i.id !== id);
-        db.recipes = (db.recipes || []).filter(r => r.ingredient_id !== id); save();
-      },
-      async listRecipes() { return clone(load().recipes || []); },
-      async saveRecipe(productId, rows, cost) {
-        const db = load();
-        db.recipes = (db.recipes || []).filter(r => r.product_id !== productId).concat(rows.map(x => ({ product_id: productId, ...x })));
-        db.products.find(p => p.id === productId).cost = cost; save();
+      async deleteProduction(id) { const db = load(); db.productions = (db.productions || []).filter(p => p.id !== id); save(); },
+      async changePassword() {},
+      // Mode contoh: cadangan dari mode contoh menggantikan data contoh
+      async restore(data) {
+        if (!data || !Array.isArray(data.products) || data.nextId == null)
+          throw new Error('Di mode contoh hanya bisa memulihkan cadangan dari mode contoh.');
+        mem = clone(data); save();
+        return { produk: mem.products.length, nota: mem.orders.length };
       },
       async backup() { return clone(load()); },
       async addCashOut(day, amount, note) {

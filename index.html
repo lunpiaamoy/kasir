@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   </nav>
   <div class="who">
     <span id="whoEmail"></span>
-    <button class="ghost small owner-only" id="settingsBtn">Pengaturan</button>
+    <button class="ghost small" id="settingsBtn">Pengaturan</button>
     <button class="ghost small" id="logoutBtn">Keluar</button>
   </div>
 </header>
@@ -197,6 +197,16 @@
     <div class="view-head"><h2>Pengaturan</h2></div>
 
     <section class="panel">
+      <h3>Ubah password</h3>
+      <p class="muted hint">Untuk akun yang sedang masuk: <b id="pwEmail"></b></p>
+      <form class="pw-form" id="pwForm">
+        <label>Password baru<input type="password" id="pw1" autocomplete="new-password" minlength="6" required></label>
+        <label>Ulangi password baru<input type="password" id="pw2" autocomplete="new-password" minlength="6" required></label>
+        <button class="primary" type="submit">Simpan password</button>
+      </form>
+    </section>
+
+    <section class="panel owner-only">
       <h3>Staf</h3>
       <p class="muted hint">Staf baru otomatis bisa memakai kasir setelah akun login-nya dibuat di Supabase:
         <b>Authentication → Users → Add user</b> (email yang sama, centang <b>Auto Confirm User</b>).
@@ -204,23 +214,15 @@
       <div class="table-wrap"><table class="table" id="staffTable"></table></div>
     </section>
 
-    <section class="panel">
-      <h3>Bahan baku</h3>
-      <p class="muted hint">Harga per satuan, mis. Ayam per gr (Rp 80.000/kg = 80), Kulit lunpia per lembar, Telur per butir.
-        Kalau harga bahan berubah, HPP produk ikut berubah untuk penjualan berikutnya.</p>
-      <div class="table-wrap"><table class="table" id="ingredientTable"></table></div>
-    </section>
-
-    <section class="panel">
-      <h3>HPP per produk</h3>
-      <p class="muted hint">HPP (modal) per pcs dihitung dari resep. Produk tanpa resep memakai HPP manual. HPP saat terjual disimpan di nota, jadi laba nota lama tidak berubah.</p>
-      <div class="table-wrap"><table class="table" id="hppTable"></table></div>
-    </section>
-
-    <section class="panel">
+    <section class="panel owner-only">
       <h3>Cadangan data</h3>
-      <p class="muted hint">Unduh semua data (produk, transaksi, stok, kas, kontak, bahan & resep) dalam satu file. Simpan di laptop atau Google Drive, mis. seminggu sekali.</p>
+      <p class="muted hint">Unduh semua data (produk, transaksi, stok, kas, kontak, pembelian &amp; produksi) dalam satu file. Simpan di laptop atau Google Drive, mis. seminggu sekali.</p>
       <button class="primary" id="backupBtn">Unduh cadangan data</button>
+      <h3 class="sub">Pulihkan dari cadangan</h3>
+      <p class="muted hint">Pilih file cadangan (.json). Data di file yang <b>tidak ada</b> di kasir (mis. terhapus) ditambahkan kembali.
+        Data yang sekarang ada tidak diubah dan tidak dihapus. Daftar staf tidak ikut dipulihkan.</p>
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      <button class="ghost" id="restoreBtn">Pilih file cadangan…</button>
     </section>
   </section>
 
@@ -268,6 +270,29 @@
         <div class="table-wrap"><table class="table" id="dailyTable"></table></div>
       </div>
     </div>
+
+    <section class="panel owner-only prod-panel" aria-labelledby="prodTitle">
+      <div class="view-head">
+        <h3 id="prodTitle">Pembelian bahan &amp; produksi</h3>
+        <button class="primary small" id="prodAddBtn">+ Catat pembelian &amp; produksi</button>
+      </div>
+      <p class="muted hint">Catat belanja bahan (kulit, telur, rebung, ayam, udang, …), sisanya, dan berapa pcs yang jadi.
+        Sisa bahan tidak dihitung sebagai biaya. Laba = penjualan − bahan terpakai.</p>
+      <div id="prodForm" hidden></div>
+      <div class="metrics" id="prodMetrics"></div>
+      <div class="report-grid">
+        <div>
+          <h3>Hasil produksi</h3>
+          <div class="table-wrap"><table class="table" id="prodOutTable"></table></div>
+        </div>
+        <div>
+          <h3>Pembelian bahan</h3>
+          <div class="table-wrap"><table class="table" id="prodBuyTable"></table></div>
+        </div>
+      </div>
+      <h3>Catatan per tanggal</h3>
+      <div class="table-wrap"><table class="table" id="prodTable"></table></div>
+    </section>
   </section>
 </main>
 
@@ -317,9 +342,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=26"></script>
-<script src="db.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="config.js?v=27"></script>
+<script src="db.js?v=27"></script>
+<script src="app.js?v=27"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
