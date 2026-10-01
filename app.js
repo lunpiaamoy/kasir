@@ -92,8 +92,7 @@
   let appShown = false;
   async function showApp(session) {
     $('loginView').hidden = true; $('topbar').hidden = false; $('app').hidden = false;
-    myEmail = session.user?.email || '';
-    $('whoEmail').textContent = myEmail;
+    $('whoEmail').textContent = session.user?.email || '';
     if (appShown) return;
     appShown = true;
     try {
@@ -108,7 +107,7 @@
       refreshPendingCount();
     } catch (e) { toast(e.message, true); }
   }
-  let role = null, myEmail = '';
+  let role = null;
   const isOwner = () => role === 'pemilik';
 
   $('loginForm').addEventListener('submit', async e => {
@@ -1043,7 +1042,7 @@
       <tbody>${productions.length ? productions.map(p => `<tr>
         <td data-sort="${p.day}">${dmy(parseYmd(p.day))}</td>
         <td>${esc((p.purchases || []).map(b => `${b.item} ${dec(b.qty)} ${b.unit}${Number(b.leftover) ? ` (sisa ${dec(b.leftover)})` : ''}`).join(', ')) || '—'}</td>
-        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}</td>
+        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}${p.stocked && p.outputs?.length ? ' <span class="chip ok">masuk stok</span>' : ''}</td>
         <td class="num">${rp(Math.round((p.purchases || []).reduce((s, b) => s + usedOf(b), 0)))}</td>
         <td>${esc(p.note || '')}</td>
         <td><div class="add-stock"><button class="ghost small" data-prodedit="${p.id}">Ubah</button>
@@ -1063,7 +1062,7 @@
   async function openProdForm(entry) {
     if (!products.length) await loadProducts();
     const e = entry || {
-      day: ymdLocal(new Date()), note: '', outputs: [],
+      day: ymdLocal(new Date()), note: '', outputs: [], stocked: true,
       purchases: BAHAN.map(item => ({ item, unit: { 'Kulit lunpia': 'lembar', Telur: 'butir' }[item] || 'kg' })),
     };
     const outQty = id => (e.outputs || []).find(o => o.product_id === id)?.qty ?? '';
@@ -1081,6 +1080,8 @@
       <h4>Hasil produksi (pcs)</h4>
       <div class="out-grid">${list.map(p => `<label>${esc(prodName(p))}
         <input data-out="${p.id}" inputmode="numeric" value="${outQty(p.id)}" placeholder="0"></label>`).join('')}</div>
+      <label class="check"><input type="checkbox" data-f="stocked"${e.stocked !== false ? ' checked' : ''}>
+        Tambahkan hasil produksi ke stok <span class="muted">(tercatat di kartu stok)</span></label>
       <label>Catatan <input data-f="note" value="${esc(e.note || '')}" placeholder="opsional"></label>
       <p>Belanja <b data-sum="buy"></b> · bahan terpakai <b data-sum="used"></b> · hasil <b data-sum="pcs"></b></p>
       <div class="actions"><button type="button" class="primary small" data-prodsave>Simpan</button>
@@ -1102,7 +1103,8 @@
       const p = byId(Number(i.dataset.out));
       return { product_id: p.id, name: prodName(p), qty: toInt(i.value) };
     }).filter(o => o.qty > 0);
-    return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(), purchases, outputs };
+    return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(),
+      stocked: box.querySelector('[data-f="stocked"]').checked, purchases, outputs };
   }
   function prodCalc() {
     const { purchases, outputs } = readProdForm(), q = k => $('prodForm').querySelector(`[data-sum="${k}"]`);
@@ -1132,9 +1134,9 @@
     b.disabled = true;
     try {
       await DB.saveProduction({ id: Number($('prodForm').dataset.id) || null, ...x });
-      toast('Catatan disimpan');
+      toast(x.stocked && x.outputs.length ? 'Catatan disimpan, stok produk ikut diperbarui' : 'Catatan disimpan');
       $('prodForm').hidden = true; $('prodForm').innerHTML = '';
-      renderProduction(prodSales.valid, prodSales.total);
+      renderProduction(prodSales.valid, prodSales.total); loadProducts();
     } catch (err) { toast(err.message, true); b.disabled = false; }
   });
   $('prodTable').addEventListener('click', async e => {
@@ -1142,8 +1144,8 @@
     if (b.dataset.prodedit) return openProdForm(productions.find(p => p.id === Number(b.dataset.prodedit)));
     if (b.dataset.proddel) {
       const p = productions.find(x => x.id === Number(b.dataset.proddel));
-      if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?`)) return;
-      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); }
+      if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?${p.stocked && p.outputs?.length ? '\nStok hasil produksinya ikut dikurangi kembali.' : ''}`)) return;
+      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); loadProducts(); }
       catch (err) { toast(err.message, true); }
     }
   });
@@ -1574,25 +1576,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  function renderSettings() {
-    $('pwEmail').textContent = myEmail;
-    if (isOwner()) renderStaff();
-  }
-
-  // ---- Ubah password (semua akun)
-  $('pwForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const pw = $('pw1').value, btn = e.submitter || $('pwForm').querySelector('button');
-    if (pw.length < 6) return toast('Password minimal 6 karakter', true);
-    if (pw !== $('pw2').value) return toast('Kedua password tidak sama', true);
-    btn.disabled = true;
-    try {
-      await DB.changePassword(pw);
-      $('pwForm').reset();
-      toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : 'Password diubah. Pakai password baru saat masuk berikutnya.');
-    } catch (err) { toast(err.message, true); }
-    finally { btn.disabled = false; }
-  });
+  function renderSettings() { renderStaff(); }
 
   // ---- Staf
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
@@ -1607,6 +1591,7 @@
         <td><input data-f="name" value="${esc(st.name || '')}" aria-label="Nama"></td>
         <td>${roleSelect(st.role)}</td>
         <td><div class="add-stock"><button class="ghost small" data-staffsave>Simpan</button>
+          <button class="ghost small" data-staffpw>Password</button>
           <button class="ghost small danger" data-staffdel>Hapus</button></div></td>
       </tr>`).join('')}
       <tr class="new-row">
@@ -1620,6 +1605,28 @@
     const b = e.target.closest('button'); if (!b) return;
     const row = b.closest('tr'), f = k => row.querySelector(`[data-f="${k}"]`)?.value.trim() || '';
     try {
+      if ('staffpw' in b.dataset) {
+        $('staffTable').querySelector('.pw-row')?.remove();
+        row.insertAdjacentHTML('afterend', `<tr class="pw-row" data-email="${esc(row.dataset.email)}"><td colspan="4">
+          <div class="pw-form"><b>Password baru untuk ${esc(row.dataset.email)}</b>
+            <input type="password" data-f="pw1" autocomplete="new-password" placeholder="Password baru (min. 6 karakter)" aria-label="Password baru">
+            <input type="password" data-f="pw2" autocomplete="new-password" placeholder="Ulangi password baru" aria-label="Ulangi password baru">
+            <div class="actions"><button class="primary small" data-pwsave>Simpan password</button><button class="ghost small" data-pwcancel>Batal</button></div>
+          </div></td></tr>`);
+        row.nextElementSibling.querySelector('input').focus();
+        return;
+      }
+      if ('pwcancel' in b.dataset) return row.remove();
+      if ('pwsave' in b.dataset) {
+        const pw = row.querySelector('[data-f="pw1"]').value;
+        if (pw.length < 6) return toast('Password minimal 6 karakter', true);
+        if (pw !== row.querySelector('[data-f="pw2"]').value) return toast('Kedua password tidak sama', true);
+        b.disabled = true;
+        try { await DB.setStaffPassword(row.dataset.email, pw); }
+        finally { b.disabled = false; }
+        row.remove();
+        return toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : `Password ${row.dataset.email} diubah`);
+      }
       if ('staffadd' in b.dataset) {
         if (!f('email')) return toast('Isi email staf', true);
         await DB.saveStaff(f('email'), f('name'), f('role')); toast(`Staf ${f('email')} ditambahkan`);
