@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 010, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 011, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
@@ -85,8 +85,21 @@
         if (error?.code === 'PGRST202') return permsFor(role, null);
         fail(error); return permsFor(role, data);
       },
-      async setStaffPerms(email, perms) {
-        const { error } = await sb.rpc('set_staff_perms', { p_email: email, p_perms: perms }); fail(error);
+      // opts: { cash_out_max (0 = tanpa batas), cancel_reason_required } (011)
+      async setStaffPerms(email, perms, opts = {}) {
+        const { error } = await sb.rpc('set_staff_perms', { p_email: email, p_perms: perms,
+          p_cash_out_max: opts.cash_out_max ?? null, p_cancel_reason_required: opts.cancel_reason_required ?? null });
+        fail(error);
+      },
+      async myOptions() {
+        const { data, error } = await sb.rpc('my_options');
+        if (error?.code === 'PGRST202') return { cash_out_max: 0, cancel_reason_required: false };
+        fail(error); return data;
+      },
+      // Catatan aktivitas (pemilik, 011)
+      async listActivity(fromIso) {
+        const { data, error } = await sb.from('activity_log').select('*').gte('at', fromIso).order('id', { ascending: false }).limit(1000);
+        fail(error); return data;
       },
       async myRole() {
         const { data, error } = await sb.rpc('my_role');
@@ -148,7 +161,11 @@
         }
         fail(error);
       },
-      async cancelOrder(id) { const { error } = await sb.rpc('cancel_order', { p_id: id }); fail(error); },
+      async cancelOrder(id, reason = '') {
+        let { error } = await sb.rpc('cancel_order', { p_id: id, p_reason: reason });
+        if (error?.code === 'PGRST202') ({ error } = await sb.rpc('cancel_order', { p_id: id }));   // sebelum 011
+        fail(error);
+      },
       // Stok dikembalikan dan nota dihapus dalam satu transaksi database (khusus pemilik)
       async deleteOrder(id) { const { error } = await sb.rpc('delete_order', { p_id: id }); fail(error); },
 
@@ -307,6 +324,10 @@
         (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
       });
     };
+    // Catatan aktivitas di mode contoh (meniru pemicu di database, 011)
+    const notaLabel = o => `(${o.year}) ${String(o.seq).padStart(5, '0')}`;
+    const demoLog = (db, action, ref, detail) =>
+      (db.log ||= []).push({ id: db.nextId++, at: new Date().toISOString(), actor: 'contoh@lunpia.local', action, ref, detail });
     let signedIn = true;
     let authCb = () => {};
     // HPP per pcs seperti product_cost() di database: dari resep, kalau tidak ada dari HPP manual
@@ -327,10 +348,19 @@
       permDefaults: PERM_DEFAULTS, permParent: PERM_PARENT,
       // Wewenang saat mencoba sebagai kasir diambil dari akun contoh di daftar staf
       async myPerms(role) { return permsFor(role, (load().staff || []).find(x => x.email === 'contoh@lunpia.local')?.perms); },
-      async setStaffPerms(email, perms) {
+      async setStaffPerms(email, perms, opts = {}) {
         const st = (load().staff || []).find(x => x.email === email); if (!st) throw new Error('Email ini tidak ada di daftar staf');
-        st.perms = permsFor('kasir', perms); save();
+        st.perms = permsFor('kasir', perms);
+        if (opts.cash_out_max != null) st.cash_out_max = opts.cash_out_max;
+        if (opts.cancel_reason_required != null) st.cancel_reason_required = opts.cancel_reason_required;
+        save();
       },
+      async myOptions() {
+        if (await this.myRole() === 'pemilik') return { cash_out_max: 0, cancel_reason_required: false };
+        const st = (load().staff || []).find(x => x.email === 'contoh@lunpia.local') || {};
+        return { cash_out_max: st.cash_out_max || 0, cancel_reason_required: st.cancel_reason_required ?? true };
+      },
+      async listActivity(fromIso) { return clone((load().log || []).filter(x => x.at >= fromIso).reverse()); },
 
       async listProducts() { return clone(load().products).sort((a, b) => a.sort - b.sort || a.id - b.id); },
       async saveProduct(p) {
@@ -341,7 +371,8 @@
       },
       async addStock(id, delta, note = '') {
         const db = load();
-        db.products.find(x => x.id === id).stock += delta;
+        const prod = db.products.find(x => x.id === id); prod.stock += delta;
+        if (delta < 0) demoLog(db, 'stok', `${prod.category} ${prod.name}`, { delta, note });
         (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
       },
@@ -409,6 +440,7 @@
         const seq = Number(p.seq) || o.seq;
         if (seq !== o.seq && db.orders.some(x => x.year === o.year && x.seq === seq))
           throw new Error(`Nomor nota (${o.year}) ${String(seq).padStart(5, '0')} sudah dipakai`);
+        const was = { nota: notaLabel(o), total: o.total, pay_method: o.pay_method, paid: o.paid, customer: o.customer_name };
         o.seq = seq;
         db.counters ||= {}; db.counters[o.year] = db.orders.filter(x => x.year === o.year).reduce((m, x) => Math.max(m, x.seq), 0);
         Object.assign(o, {
@@ -420,6 +452,8 @@
           status: ful === 'langsung' ? 'selesai' : o.fulfillment === 'langsung' ? 'menunggu' : o.status,
           edited_at: new Date().toISOString(), order_items: items,
         });
+        demoLog(db, 'ubah_nota', notaLabel(o), { sebelum: was,
+          sesudah: { nota: notaLabel(o), total: o.total, pay_method: o.pay_method, paid: o.paid, customer: o.customer_name } });
         save(); return clone(o);
       },
       async notaSeqs(year) { return load().orders.filter(o => o.year === year).map(o => o.seq).sort((a, b) => a - b); },
@@ -435,16 +469,24 @@
         return clone(load().orders).map(({ order_items, ...o }) => o);
       },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
-      async cancelOrder(id) {
+      async cancelOrder(id, reason = '') {
         const db = load(); const o = db.orders.find(x => x.id === id);
+        if (!reason.trim() && (await this.myOptions()).cancel_reason_required) throw new Error('Isi alasan pembatalan');
         if (o && o.status !== 'batal') {
           o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
-          o.status = 'batal'; o.cancelled_at = new Date().toISOString(); save();
+          o.status = 'batal'; o.cancelled_at = new Date().toISOString(); o.cancel_reason = reason.trim();
+          demoLog(db, 'batal_nota', notaLabel(o), { total: o.total, pay_method: o.pay_method, customer: o.customer_name, alasan: o.cancel_reason });
+          save();
         }
       },
       async deleteOrder(id) {
-        await this.cancelOrder(id);
-        const db = load(), year = db.orders.find(o => o.id === id)?.year;
+        const before = clone(load().orders.find(o => o.id === id) || null);
+        if (before && before.status !== 'batal') {
+          const db = load(), o = db.orders.find(x => x.id === id);
+          o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
+        }
+        const db = load(), year = before?.year;
+        if (before) demoLog(db, 'hapus_nota', notaLabel(before), before);
         db.orders = db.orders.filter(o => o.id !== id);
         // nota berikutnya melanjutkan dari nomor terakhir yang masih tercatat
         if (year) (db.counters ||= {})[year] = db.orders.filter(o => o.year === year).reduce((m, o) => Math.max(m, o.seq), 0);
@@ -521,7 +563,11 @@
       async addCashOut(day, amount, note) {
         const db = load(); (db.cashOut ||= []).push({ id: db.nextId++, day, amount, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() }); save();
       },
-      async deleteCashOut(id) { const db = load(); db.cashOut = (db.cashOut || []).filter(x => x.id !== id); save(); },
+      async deleteCashOut(id) {
+        const db = load(), x = (db.cashOut || []).find(c => c.id === id);
+        if (x) demoLog(db, 'kas_keluar', x.day, { hapus: true, amount: x.amount, note: x.note, by: x.created_by });
+        db.cashOut = (db.cashOut || []).filter(c => c.id !== id); save();
+      },
       async deleteCashDay(day) { const db = load(); if (db.cash) { delete db.cash[day]; save(); } },
       async listHiddenContacts() { return clone(Object.entries(load().hidden || {}).map(([key, hidden_at]) => ({ key, hidden_at }))); },
       async updateContact(key, name, wa) {
