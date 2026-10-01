@@ -7,10 +7,17 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 007, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 008, yang belum) di Supabase (SQL Editor → Run).';
+  const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
+  // Wewenang kasir dan bawaannya (sama dengan perm_defaults() di 008). Pemilik selalu boleh semua.
+  const PERM_DEFAULTS = { laporan: true, kontak: true, kontak_ubah: false, batal: true, ubah_nota: false, hapus_nota: false,
+    stok_masuk: true, koreksi_stok: false, produk: false, kas: true, kas_ubah: false };
+  const permsFor = (role, perms) => Object.fromEntries(Object.keys(PERM_DEFAULTS).map(k =>
+    [k, role === 'pemilik' || (typeof perms?.[k] === 'boolean' ? perms[k] : PERM_DEFAULTS[k])]));
   function fail(error) {
     if (!error) return;
     if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
+    if (error.code === '42501') throw new Error(DENIED_MSG);
     throw new Error(error.message || String(error));
   }
 
@@ -58,6 +65,16 @@
       // Kalau 002_pembaruan.sql belum dijalankan, my_role belum ada: pakai is_staff (semua staf
       // dianggap pemilik, seperti sebelumnya) dan tandai needsUpdate supaya aplikasi memberi tahu.
       needsUpdate: false,
+      permDefaults: PERM_DEFAULTS,
+      // Wewenang akun yang sedang masuk; sebelum 008 dijalankan: sesuai peran seperti dulu
+      async myPerms(role) {
+        const { data, error } = await sb.rpc('my_perms');
+        if (error?.code === 'PGRST202') return permsFor(role, null);
+        fail(error); return permsFor(role, data);
+      },
+      async setStaffPerms(email, perms) {
+        const { error } = await sb.rpc('set_staff_perms', { p_email: email, p_perms: perms }); fail(error);
+      },
       async myRole() {
         const { data, error } = await sb.rpc('my_role');
         if (!error) return data || null;
@@ -285,6 +302,13 @@
       async signOut() { signedIn = false; },
       // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
       async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },
+      permDefaults: PERM_DEFAULTS,
+      // Wewenang saat mencoba sebagai kasir diambil dari akun contoh di daftar staf
+      async myPerms(role) { return permsFor(role, (load().staff || []).find(x => x.email === 'contoh@lunpia.local')?.perms); },
+      async setStaffPerms(email, perms) {
+        const st = (load().staff || []).find(x => x.email === email); if (!st) throw new Error('Email ini tidak ada di daftar staf');
+        st.perms = permsFor('kasir', perms); save();
+      },
 
       async listProducts() { return clone(load().products).sort((a, b) => a.sort - b.sort || a.id - b.id); },
       async saveProduct(p) {
