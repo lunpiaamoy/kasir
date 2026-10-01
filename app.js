@@ -1731,17 +1731,18 @@
   const PERM_TABS = [
     ['pesanan', 'Tab Pesanan', 'Lihat pesanan & riwayat transaksi, tandai selesai, cetak ulang, ingatkan via WA',
       { batal: 'Batalkan pesanan', ubah_nota: 'Ubah nota (termasuk nomor nota)', hapus_nota: 'Hapus nota' }],
-    ['stok', 'Tab Stok', 'Lihat stok & kartu stok',
-      { stok_masuk: 'Tambah stok masuk', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
-        produk_tambah: 'Tambah produk baru', produk_ubah: 'Ubah produk, harga & sembunyikan produk' }],
     ['kas', 'Tab Kas', 'Lihat kas hari ini & riwayat kas',
       { kas_buka: 'Isi / ubah uang awal', kas_tutup: 'Tutup kasir (hitung uang di laci)', kas_keluar: 'Catat kas keluar',
         kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar' }],
-    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
-      { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
     ['pembelian', 'Tab Produksi', 'Lihat pembelian bahan, hasil produksi & sisa bahan',
       { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan' }],
+    ['stok', 'Tab Stok', 'Lihat stok & kartu stok',
+      { stok_masuk: 'Tambah stok masuk', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
+        produk_tambah: 'Tambah produk baru', produk_ubah: 'Ubah produk, harga & sembunyikan produk' }],
+    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
+      { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
     ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
+
   ];
   const permRaw = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
   const permOf = (st, k) => permRaw(st, k) && permRaw(st, DB.permParent[k] || k);

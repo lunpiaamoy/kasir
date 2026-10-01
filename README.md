@@ -22,10 +22,10 @@ Pemilik selalu boleh semuanya. Wewenang tiap kasir diatur pemilik **per tab** di
 |---|:-:|---|
 | Kasir | ✅ selalu | transaksi, cetak struk, kirim nota WA |
 | Pesanan | ✅ | ✅ batalkan · ❌ ubah nota (termasuk nomor) · ❌ hapus nota |
-| Stok | ✅ | ✅ tambah stok masuk · ❌ kurangi stok · ❌ stok opname · ❌ tambah produk · ❌ ubah produk & harga |
 | Kas | ✅ | ✅ uang awal · ✅ tutup kasir · ✅ kas keluar · ❌ ubah kas yang sudah ditutup · ❌ hapus riwayat kas |
-| Laporan | ✅ | ✅ unduh Excel · ❌ lihat laba |
 | Produksi | ❌ | ❌ catat & ubah · ❌ hapus |
+| Stok | ✅ | ✅ tambah stok masuk · ❌ kurangi stok · ❌ stok opname · ❌ tambah produk · ❌ ubah produk & harga |
+| Laporan | ✅ | ✅ unduh Excel · ❌ lihat laba |
 | Kontak | ✅ | ❌ ubah kontak · ❌ hapus kontak |
 
 Pengaturan (staf, wewenang, password, cadangan) khusus pemilik.
