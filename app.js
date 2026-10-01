@@ -75,7 +75,7 @@
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
-  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'hppTable'].forEach(makeSortable);
+  ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodTable'].forEach(makeSortable);
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {
@@ -92,7 +92,8 @@
   let appShown = false;
   async function showApp(session) {
     $('loginView').hidden = true; $('topbar').hidden = false; $('app').hidden = false;
-    $('whoEmail').textContent = session.user?.email || '';
+    myEmail = session.user?.email || '';
+    $('whoEmail').textContent = myEmail;
     if (appShown) return;
     appShown = true;
     try {
@@ -107,7 +108,7 @@
       refreshPendingCount();
     } catch (e) { toast(e.message, true); }
   }
-  let role = null;
+  let role = null, myEmail = '';
   const isOwner = () => role === 'pemilik';
 
   $('loginForm').addEventListener('submit', async e => {
@@ -940,44 +941,24 @@
     const ongkir = sum(valid, o => o.ongkir);
     const canceled = orders.length - valid.length;
 
-    // Laba kotor (pemilik): HPP dari nota (saat terjual); nota lama tanpa HPP memakai HPP sekarang
-    let profitHtml = '';
-    const itemCost = i => i.cost ?? (byId(i.product_id) ? costOf(byId(i.product_id)) : null);
-    if (isOwner()) {
-      await loadHpp();
-      // Laba hanya dihitung dari item yang punya HPP; item tanpa HPP disebut terpisah supaya laba tidak terlalu besar
-      let cost = 0, costedSales = 0, missing = 0;
-      valid.forEach(o => o.order_items.forEach(i => {
-        const c = itemCost(i);
-        if (c == null) missing += i.qty; else { cost += c * i.qty; costedSales += i.subtotal; }
-      }));
-      const profit = costedSales - cost;
-      profitHtml = `<div class="metric"><small>HPP</small><b>Rp ${rp(cost)}</b><span>${missing ? `<span class="chip warn">${missing} pcs belum ada HPP</span>` : 'modal barang terjual'}</span></div>
-        <div class="metric lead"><small>Laba kotor</small><b>Rp ${rp(profit)}</b><span>${costedSales ? Math.round(profit / costedSales * 100) + '%' : '—'}${missing ? ' · tanpa produk yang belum ada HPP' : ' dari penjualan'}</span></div>`;
-    }
-
     $('metrics').innerHTML = `
       <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b><span>${valid.length} transaksi</span></div>
       <div class="metric"><small>Tunai</small><b>Rp ${rp(cash)}</b><span>${valid.filter(o => o.pay_method === 'tunai').length} transaksi</span></div>
       <div class="metric"><small>QRIS</small><b>Rp ${rp(qris)}</b><span>${valid.filter(o => o.pay_method === 'qris').length} transaksi</span></div>
       <div class="metric"><small>Ongkir tercatat</small><b>Rp ${rp(ongkir)}</b><span>Di luar penjualan</span></div>
-      ${profitHtml}
       ${canceled ? `<div class="metric"><small>Dibatalkan</small><b>${canceled}</b><span>Tidak dihitung</span></div>` : ''}`;
 
     const top = new Map();
     valid.forEach(o => o.order_items.forEach(i => {
       const k = i.category + ' · ' + i.name;
-      const r = top.get(k) || { qty: 0, amount: 0, profit: 0, noCost: false };
-      const c = isOwner() ? itemCost(i) : null;
+      const r = top.get(k) || { qty: 0, amount: 0 };
       r.qty += i.qty; r.amount += i.subtotal;
-      if (c == null) r.noCost = true; else r.profit += i.subtotal - c * i.qty;
       top.set(k, r);
     }));
     const topRows = [...top].sort((a, b) => b[1].qty - a[1].qty);
-    $('topTable').innerHTML = `<thead><tr><th>Produk</th><th class="num">Terjual</th><th class="num">Omzet</th><th class="num owner-only">Laba</th></tr></thead>
-      <tbody>${topRows.length ? topRows.map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.qty}</td><td class="num">${rp(r.amount)}</td>
-        <td class="num owner-only" data-sort="${r.noCost ? '' : r.profit}">${r.noCost && !r.profit ? '<span class="muted">—</span>' : rp(r.profit)}${r.noCost && r.profit ? '<span class="muted">*</span>' : ''}</td></tr>`).join('')
-        : '<tr><td class="empty" colspan="4">Belum ada penjualan di periode ini.</td></tr>'}</tbody>`;
+    $('topTable').innerHTML = `<thead><tr><th>Produk</th><th class="num">Terjual</th><th class="num">Omzet</th></tr></thead>
+      <tbody>${topRows.length ? topRows.map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.qty}</td><td class="num">${rp(r.amount)}</td></tr>`).join('')
+        : '<tr><td class="empty" colspan="3">Belum ada penjualan di periode ini.</td></tr>'}</tbody>`;
 
     // Periode ≤ 1 hari: per jam; ≤ 62 hari: per hari; lebih panjang: per bulan
     const days = Math.round((to - from) / 864e5);
@@ -1000,7 +981,172 @@
     $('dailyTable').innerHTML = `<thead><tr><th>${listUnit === 'month' ? 'Bulan' : 'Tanggal'}</th><th class="num">Transaksi</th><th class="num">Penjualan</th></tr></thead>
       <tbody>${rows.length ? rows.map(b => `<tr><td data-sort="${esc(b.key)}">${esc(b.long)}</td><td class="num">${b.n}</td><td class="num">${rp(b.amount)}</td></tr>`).join('')
         : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
+    if (isOwner()) renderProduction(valid, total);
   }
+
+  // ---------------------------------------------------------------- Pembelian bahan & produksi (pemilik)
+  // Bahan terpakai = harga beli × (jumlah − sisa) / jumlah. Sisa tidak dihitung sebagai biaya.
+  // Laba = penjualan (tanpa ongkir) − bahan terpakai di periode yang sama.
+  const BAHAN = ['Kulit lunpia', 'Telur', 'Rebung', 'Ayam', 'Udang'];
+  const SATUAN = ['kg', 'gr', 'lembar', 'butir', 'ikat', 'liter', 'pcs', 'bungkus'];
+  const usedOf = b => Number(b.qty) > 0 ? Number(b.price) * Math.max(0, Number(b.qty) - Number(b.leftover || 0)) / Number(b.qty) : Number(b.price) || 0;
+  let productions = [], prodSales = { valid: [], total: 0 };
+
+  async function renderProduction(valid, total) {
+    prodSales = { valid, total };
+    const [from, to] = range;
+    try { productions = await DB.listProductions(ymdLocal(from), ymdLocal(new Date(+to - 864e5))); }
+    catch (e) {
+      productions = [];
+      $('prodMetrics').innerHTML = `<p class="error">${esc(e.message)}</p>`;
+      ['prodOutTable', 'prodBuyTable', 'prodTable'].forEach(id => ($(id).innerHTML = ''));
+      return;
+    }
+    const buys = productions.flatMap(p => p.purchases || []), outs = productions.flatMap(p => p.outputs || []);
+    const bought = buys.reduce((s, b) => s + Number(b.price || 0), 0);
+    const used = Math.round(buys.reduce((s, b) => s + usedOf(b), 0));
+    const pcs = outs.reduce((s, o) => s + Number(o.qty || 0), 0);
+    const profit = total - used;
+    $('prodMetrics').innerHTML = productions.length ? `
+      <div class="metric"><small>Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
+      <div class="metric"><small>Sisa bahan</small><b>Rp ${rp(bought - used)}</b><span>Tidak dihitung sebagai biaya</span></div>
+      <div class="metric"><small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>${pcs ? `± Rp ${rp(Math.round(used / pcs))} per pcs` : 'Belum ada hasil produksi'}</span></div>
+      <div class="metric"><small>Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>
+      <div class="metric lead"><small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan Rp ${rp(total)} − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span></div>`
+      : '<p class="muted">Belum ada catatan pembelian &amp; produksi di periode ini.</p>';
+
+    // Hasil produksi vs terjual per produk
+    const per = new Map();
+    const row = (id, name) => per.get(id) || per.set(id, { name, made: 0, sold: 0 }).get(id);
+    outs.forEach(o => { row(o.product_id, o.name).made += Number(o.qty || 0); });
+    valid.forEach(o => o.order_items.forEach(i => { if (per.has(i.product_id)) per.get(i.product_id).sold += i.qty; }));
+    const outRows = [...per.values()].sort((a, b) => b.made - a.made);
+    $('prodOutTable').innerHTML = `<thead><tr><th>Produk</th><th class="num">Diproduksi</th><th class="num">Terjual</th></tr></thead>
+      <tbody>${outRows.length ? outRows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${rp(r.made)}</td><td class="num">${rp(r.sold)}</td></tr>`).join('')
+        : '<tr><td class="empty" colspan="3">—</td></tr>'}</tbody>`;
+
+    // Pembelian per bahan (nama sama digabung)
+    const items = new Map();
+    buys.forEach(b => {
+      const k = (b.item || '').trim().toLowerCase() + '|' + (b.unit || '');
+      const r = items.get(k) || items.set(k, { item: b.item, unit: b.unit, qty: 0, leftover: 0, price: 0, used: 0 }).get(k);
+      r.qty += Number(b.qty || 0); r.leftover += Number(b.leftover || 0); r.price += Number(b.price || 0); r.used += usedOf(b);
+    });
+    const buyRows = [...items.values()].sort((a, b) => b.price - a.price);
+    $('prodBuyTable').innerHTML = `<thead><tr><th>Bahan</th><th class="num">Dibeli</th><th class="num">Sisa</th><th class="num">Harga</th><th class="num">Terpakai</th></tr></thead>
+      <tbody>${buyRows.length ? buyRows.map(r => `<tr><td>${esc(r.item)}</td>
+        <td class="num" data-sort="${r.qty}">${dec(r.qty)} ${esc(r.unit)}</td><td class="num" data-sort="${r.leftover}">${r.leftover ? `${dec(r.leftover)} ${esc(r.unit)}` : '—'}</td>
+        <td class="num">${rp(r.price)}</td><td class="num">${rp(Math.round(r.used))}</td></tr>`).join('')
+        : '<tr><td class="empty" colspan="5">—</td></tr>'}</tbody>`;
+
+    $('prodTable').innerHTML = `<thead><tr><th>Tanggal</th><th>Pembelian</th><th>Hasil</th><th class="num">Bahan terpakai</th><th>Catatan</th><th></th></tr></thead>
+      <tbody>${productions.length ? productions.map(p => `<tr>
+        <td data-sort="${p.day}">${dmy(parseYmd(p.day))}</td>
+        <td>${esc((p.purchases || []).map(b => `${b.item} ${dec(b.qty)} ${b.unit}${Number(b.leftover) ? ` (sisa ${dec(b.leftover)})` : ''}`).join(', ')) || '—'}</td>
+        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}</td>
+        <td class="num">${rp(Math.round((p.purchases || []).reduce((s, b) => s + usedOf(b), 0)))}</td>
+        <td>${esc(p.note || '')}</td>
+        <td><div class="add-stock"><button class="ghost small" data-prodedit="${p.id}">Ubah</button>
+          <button class="ghost small danger" data-proddel="${p.id}">Hapus</button></div></td>
+      </tr>`).join('') : '<tr><td class="empty" colspan="6">—</td></tr>'}</tbody>`;
+  }
+
+  const prodName = p => `${p.category} ${p.name}`;
+  const buyLine = (b = {}) => `<div class="buy-line">
+    <input data-b="item" list="bahanList" value="${esc(b.item || '')}" placeholder="Bahan" aria-label="Bahan">
+    <input data-b="qty" inputmode="decimal" value="${b.qty != null ? dec(b.qty) : ''}" placeholder="Jumlah" aria-label="Jumlah dibeli">
+    <input data-b="unit" list="satuanList" value="${esc(b.unit || '')}" placeholder="Satuan" aria-label="Satuan">
+    <input data-b="price" inputmode="numeric" value="${b.price != null ? rp(b.price) : ''}" placeholder="Harga (Rp)" aria-label="Harga total">
+    <input data-b="leftover" inputmode="decimal" value="${Number(b.leftover) ? dec(b.leftover) : ''}" placeholder="Sisa" aria-label="Sisa">
+    <button type="button" class="ghost small danger" data-buydel aria-label="Hapus baris">×</button>
+  </div>`;
+  async function openProdForm(entry) {
+    if (!products.length) await loadProducts();
+    const e = entry || {
+      day: ymdLocal(new Date()), note: '', outputs: [],
+      purchases: BAHAN.map(item => ({ item, unit: { 'Kulit lunpia': 'lembar', Telur: 'butir' }[item] || 'kg' })),
+    };
+    const outQty = id => (e.outputs || []).find(o => o.product_id === id)?.qty ?? '';
+    // produk aktif + produk nonaktif yang sudah tercatat di entri ini
+    const list = products.filter(p => p.active || (e.outputs || []).some(o => o.product_id === p.id));
+    $('prodForm').dataset.id = entry?.id || '';
+    $('prodForm').innerHTML = `<div class="prod-edit">
+      <b>${entry ? 'Ubah catatan' : 'Catat pembelian & produksi'}</b>
+      <label class="short-label">Tanggal <input type="date" data-f="day" value="${esc(e.day)}"></label>
+      <h4>Pembelian bahan</h4>
+      <p class="muted hint">Harga = total yang dibayar. Sisa = bahan yang belum terpakai (satuan sama).</p>
+      <div class="buy-head"><span>Bahan</span><span>Jumlah</span><span>Satuan</span><span>Harga total</span><span>Sisa</span><span></span></div>
+      <div class="buy-rows">${(e.purchases?.length ? e.purchases : [{}]).map(buyLine).join('')}</div>
+      <button type="button" class="link" data-buyadd>+ Tambah bahan</button>
+      <h4>Hasil produksi (pcs)</h4>
+      <div class="out-grid">${list.map(p => `<label>${esc(prodName(p))}
+        <input data-out="${p.id}" inputmode="numeric" value="${outQty(p.id)}" placeholder="0"></label>`).join('')}</div>
+      <label>Catatan <input data-f="note" value="${esc(e.note || '')}" placeholder="opsional"></label>
+      <p>Belanja <b data-sum="buy"></b> · bahan terpakai <b data-sum="used"></b> · hasil <b data-sum="pcs"></b></p>
+      <div class="actions"><button type="button" class="primary small" data-prodsave>Simpan</button>
+        <button type="button" class="ghost small" data-prodcancel>Batal</button></div>
+      <datalist id="bahanList">${BAHAN.map(b => `<option value="${b}">`).join('')}</datalist>
+      <datalist id="satuanList">${SATUAN.map(u => `<option value="${u}">`).join('')}</datalist>
+    </div>`;
+    $('prodForm').hidden = false;
+    prodCalc();
+    $('prodForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function readProdForm() {
+    const box = $('prodForm');
+    const purchases = [...box.querySelectorAll('.buy-line')].map(l => {
+      const f = k => l.querySelector(`[data-b="${k}"]`).value.trim();
+      return { item: f('item'), qty: num(f('qty')), unit: f('unit'), price: toInt(f('price')), leftover: num(f('leftover')) };
+    }).filter(b => b.item || b.qty || b.price);
+    const outputs = [...box.querySelectorAll('[data-out]')].map(i => {
+      const p = byId(Number(i.dataset.out));
+      return { product_id: p.id, name: prodName(p), qty: toInt(i.value) };
+    }).filter(o => o.qty > 0);
+    return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(), purchases, outputs };
+  }
+  function prodCalc() {
+    const { purchases, outputs } = readProdForm(), q = k => $('prodForm').querySelector(`[data-sum="${k}"]`);
+    q('buy').textContent = 'Rp ' + rp(purchases.reduce((s, b) => s + b.price, 0));
+    q('used').textContent = 'Rp ' + rp(Math.round(purchases.reduce((s, b) => s + usedOf(b), 0)));
+    q('pcs').textContent = rp(outputs.reduce((s, o) => s + o.qty, 0)) + ' pcs';
+  }
+  $('prodAddBtn').addEventListener('click', () => openProdForm());
+  $('prodForm').addEventListener('input', e => {
+    if (e.target.dataset.b === 'price') { const v = toInt(e.target.value); e.target.value = v ? rp(v) : ''; }
+    prodCalc();
+  });
+  $('prodForm').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if ('buyadd' in d) { $('prodForm').querySelector('.buy-rows').insertAdjacentHTML('beforeend', buyLine()); return; }
+    if ('buydel' in d) { b.closest('.buy-line').remove(); return prodCalc(); }
+    if ('prodcancel' in d) { $('prodForm').hidden = true; $('prodForm').innerHTML = ''; return; }
+    if (!('prodsave' in d)) return;
+    const x = readProdForm();
+    if (!x.day) return toast('Isi tanggal', true);
+    if (!x.purchases.length && !x.outputs.length) return toast('Isi pembelian bahan atau hasil produksi', true);
+    const bad = x.purchases.find(p => !p.item || !p.qty || !p.price);
+    if (bad) return toast(`Lengkapi bahan, jumlah, dan harga${bad.item ? ' untuk ' + bad.item : ''}`, true);
+    const over = x.purchases.find(p => p.leftover > p.qty);
+    if (over) return toast(`Sisa ${over.item} lebih banyak dari yang dibeli`, true);
+    b.disabled = true;
+    try {
+      await DB.saveProduction({ id: Number($('prodForm').dataset.id) || null, ...x });
+      toast('Catatan disimpan');
+      $('prodForm').hidden = true; $('prodForm').innerHTML = '';
+      renderProduction(prodSales.valid, prodSales.total);
+    } catch (err) { toast(err.message, true); b.disabled = false; }
+  });
+  $('prodTable').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.prodedit) return openProdForm(productions.find(p => p.id === Number(b.dataset.prodedit)));
+    if (b.dataset.proddel) {
+      const p = productions.find(x => x.id === Number(b.dataset.proddel));
+      if (!confirm(`Hapus catatan pembelian & produksi tanggal ${dmy(parseYmd(p.day))}?`)) return;
+      try { await DB.deleteProduction(p.id); toast('Catatan dihapus'); renderProduction(prodSales.valid, prodSales.total); }
+      catch (err) { toast(err.message, true); }
+    }
+  });
 
   // ---------------------------------------------------------------- Cash (kas harian)
   // Seharusnya di laci = uang awal + penjualan tunai hari ini (ongkir tidak dihitung).
@@ -1428,26 +1574,25 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  // HPP: dari resep (bahan × jumlah per pcs), kalau tidak ada dari HPP manual produk — sama dengan product_cost() di database
-  let hpp = { ingredients: [], recipes: [] };
-  async function loadHpp() {
-    try { const [ingredients, recipes] = await Promise.all([DB.listIngredients(), DB.listRecipes()]); hpp = { ingredients, recipes }; }
-    catch (e) { hpp = { ingredients: [], recipes: [], error: e.message }; }
-    return hpp;
-  }
-  const ingById = id => hpp.ingredients.find(i => i.id === id);
-  const recipeOf = pid => hpp.recipes.filter(r => r.product_id === pid);
-  function costOf(p) {
-    const rows = recipeOf(p.id);
-    if (rows.length) return Math.round(rows.reduce((s, r) => s + Number(r.qty) * Number(ingById(r.ingredient_id)?.price || 0), 0));
-    return p.cost ?? null;
+  function renderSettings() {
+    $('pwEmail').textContent = myEmail;
+    if (isOwner()) renderStaff();
   }
 
-  async function renderSettings() {
-    renderStaff();
-    await loadHpp();
-    renderIngredients(); renderHpp();
-  }
+  // ---- Ubah password (semua akun)
+  $('pwForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pw = $('pw1').value, btn = e.submitter || $('pwForm').querySelector('button');
+    if (pw.length < 6) return toast('Password minimal 6 karakter', true);
+    if (pw !== $('pw2').value) return toast('Kedua password tidak sama', true);
+    btn.disabled = true;
+    try {
+      await DB.changePassword(pw);
+      $('pwForm').reset();
+      toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : 'Password diubah. Pakai password baru saat masuk berikutnya.');
+    } catch (err) { toast(err.message, true); }
+    finally { btn.disabled = false; }
+  });
 
   // ---- Staf
   const roleSelect = r => `<select data-f="role" aria-label="Peran">
@@ -1488,117 +1633,6 @@
     } catch (err) { toast(err.message, true); }
   });
 
-  // ---- Bahan baku
-  const UNITS = ['gr', 'kg', 'ml', 'liter', 'lembar', 'butir', 'pcs', 'ikat', 'bungkus'];
-  function renderIngredients() {
-    if (hpp.error) { $('ingredientTable').innerHTML = `<tbody><tr><td class="error">${esc(hpp.error)}</td></tr></tbody>`; return; }
-    $('ingredientTable').innerHTML = `<thead><tr><th>Bahan</th><th>Satuan</th><th class="num">Harga per satuan</th><th></th></tr></thead><tbody>
-      ${hpp.ingredients.map(i => `<tr data-id="${i.id}">
-        <td><input data-f="name" value="${esc(i.name)}" aria-label="Nama bahan"></td>
-        <td><input data-f="unit" value="${esc(i.unit)}" list="unitList" aria-label="Satuan" class="short"></td>
-        <td class="num"><input data-f="price" value="${dec(i.price)}" inputmode="decimal" aria-label="Harga per satuan" class="short num-in"></td>
-        <td><div class="add-stock"><button class="ghost small" data-ingsave>Simpan</button>
-          <button class="ghost small danger" data-ingdel>Hapus</button></div></td>
-      </tr>`).join('')}
-      <tr class="new-row">
-        <td><input data-f="name" placeholder="mis. Kulit lunpia" aria-label="Nama bahan baru"></td>
-        <td><input data-f="unit" placeholder="lembar" list="unitList" aria-label="Satuan" class="short"></td>
-        <td class="num"><input data-f="price" placeholder="0" inputmode="decimal" aria-label="Harga per satuan" class="short num-in"></td>
-        <td><button class="primary small" data-ingadd>Tambah bahan</button></td>
-      </tr></tbody>
-      <datalist id="unitList">${UNITS.map(u => `<option value="${u}">`).join('')}</datalist>`;
-  }
-  $('ingredientTable').addEventListener('click', async e => {
-    const b = e.target.closest('button'); if (!b) return;
-    const row = b.closest('tr'), f = k => row.querySelector(`[data-f="${k}"]`)?.value.trim() || '';
-    try {
-      if ('ingadd' in b.dataset || 'ingsave' in b.dataset) {
-        if (!f('name')) return toast('Isi nama bahan', true);
-        await DB.saveIngredient({ id: row.dataset.id ? Number(row.dataset.id) : null, name: f('name'), unit: f('unit') || 'pcs', price: num(f('price')) });
-        toast('Bahan disimpan');
-      } else if ('ingdel' in b.dataset) {
-        if (!confirm(`Hapus bahan ${f('name')}? Bahan ini juga dihapus dari semua resep.`)) return;
-        await DB.deleteIngredient(Number(row.dataset.id)); toast('Bahan dihapus');
-      }
-      await loadHpp(); renderIngredients(); renderHpp();
-    } catch (err) { toast(err.message, true); }
-  });
-
-  // ---- HPP per produk
-  function renderHpp() {
-    if (hpp.error) { $('hppTable').innerHTML = ''; return; }
-    $('hppTable').innerHTML = `<thead><tr><th>Produk</th><th class="num">Harga jual</th><th class="num">HPP/pcs</th><th class="num">Laba/pcs</th><th>Dasar HPP</th><th></th></tr></thead><tbody>
-      ${products.map(p => {
-        const c = costOf(p), rows = recipeOf(p.id);
-        const basis = rows.length ? esc(rows.map(r => `${ingById(r.ingredient_id)?.name || '?'} ${dec(r.qty)} ${ingById(r.ingredient_id)?.unit || ''}`).join(', '))
-          : p.cost != null ? 'HPP manual' : '<span class="chip warn">Belum diisi</span>';
-        return `<tr data-pid="${p.id}" class="${p.active ? '' : 'dim'}">
-          <td>${esc(p.category)} <b>${esc(p.name)}</b></td>
-          <td class="num">${rp(p.price)}</td>
-          <td class="num">${c == null ? '—' : rp(c)}</td>
-          <td class="num" data-sort="${c == null ? '' : p.price - c}">${c == null ? '—' : `${rp(p.price - c)} <span class="muted">(${Math.round((p.price - c) / p.price * 100)}%)</span>`}</td>
-          <td class="muted">${basis}</td>
-          <td><button class="ghost small" data-hppedit="${p.id}">Atur</button></td>
-        </tr>`;
-      }).join('')}</tbody>`;
-  }
-  const recipeLine = (r = {}) => `<div class="recipe-line">
-    <select data-r="ing" aria-label="Bahan"><option value="">Pilih bahan</option>
-      ${hpp.ingredients.map(i => `<option value="${i.id}"${i.id === r.ingredient_id ? ' selected' : ''}>${esc(i.name)} (${esc(i.unit)})</option>`).join('')}</select>
-    <input data-r="qty" inputmode="decimal" placeholder="jumlah per pcs" value="${r.qty != null ? dec(r.qty) : ''}" aria-label="Jumlah per pcs">
-    <span class="muted" data-r="line"></span>
-    <button class="ghost small danger" data-recdel aria-label="Hapus bahan">×</button>
-  </div>`;
-  function hppEditorCalc(box) {
-    let total = 0, any = false;
-    box.querySelectorAll('.recipe-line').forEach(l => {
-      const ing = ingById(Number(l.querySelector('[data-r="ing"]').value)), qty = num(l.querySelector('[data-r="qty"]').value);
-      const line = ing && qty ? qty * Number(ing.price) : 0;
-      if (ing && qty) any = true;
-      total += line;
-      l.querySelector('[data-r="line"]').textContent = ing && qty ? `= Rp ${rp(Math.round(line))}` : '';
-    });
-    const manual = box.querySelector('[data-f="cost"]').value.trim();
-    box.querySelector('[data-hpptotal]').textContent = any ? `Rp ${rp(Math.round(total))} (dari resep)` : manual ? `Rp ${rp(toInt(manual))} (manual)` : 'belum ada';
-  }
-  $('hppTable').addEventListener('click', async e => {
-    const b = e.target.closest('button'); if (!b) return;
-    const d = b.dataset;
-    try {
-      if (d.hppedit) {
-        $('hppTable').querySelector('.hpp-edit')?.remove();
-        const p = byId(Number(d.hppedit)), rows = recipeOf(p.id);
-        b.closest('tr').insertAdjacentHTML('afterend', `<tr class="hpp-edit"><td colspan="6"><div class="recipe-edit" data-pid="${p.id}">
-          <b>Resep 1 pcs ${esc(p.category)} ${esc(p.name)}</b>
-          ${hpp.ingredients.length ? '' : '<p class="muted">Belum ada bahan baku. Tambahkan di bagian Bahan baku, atau isi HPP manual.</p>'}
-          <div class="recipe-rows">${(rows.length ? rows : [{}]).map(recipeLine).join('')}</div>
-          ${hpp.ingredients.length ? '<button class="link" data-recadd>+ Tambah bahan</button>' : ''}
-          <label>HPP manual per pcs <span class="muted">(dipakai kalau resep kosong)</span>
-            <input data-f="cost" inputmode="numeric" value="${p.cost != null ? rp(p.cost) : ''}" placeholder="0" class="short"></label>
-          <p>HPP: <b data-hpptotal></b></p>
-          <div class="actions"><button class="primary small" data-hppsave>Simpan</button><button class="ghost small" data-hppcancel>Batal</button></div>
-        </div></td></tr>`);
-        hppEditorCalc($('hppTable').querySelector('.recipe-edit'));
-        return;
-      }
-      const box = b.closest('.recipe-edit'); if (!box) return;
-      if ('recadd' in d) { box.querySelector('.recipe-rows').insertAdjacentHTML('beforeend', recipeLine()); return hppEditorCalc(box); }
-      if ('recdel' in d) { b.closest('.recipe-line').remove(); return hppEditorCalc(box); }
-      if ('hppcancel' in d) return box.closest('tr').remove();
-      if ('hppsave' in d) {
-        const rows = [...box.querySelectorAll('.recipe-line')].map(l => ({
-          ingredient_id: Number(l.querySelector('[data-r="ing"]').value), qty: num(l.querySelector('[data-r="qty"]').value),
-        })).filter(r => r.ingredient_id && r.qty > 0);
-        if (new Set(rows.map(r => r.ingredient_id)).size !== rows.length) return toast('Ada bahan yang dipilih dua kali', true);
-        const manual = box.querySelector('[data-f="cost"]').value.trim();
-        await DB.saveRecipe(Number(box.dataset.pid), rows, manual ? toInt(manual) : null);
-        toast('HPP disimpan'); await loadProducts(); await loadHpp(); renderHpp();
-      }
-    } catch (err) { toast(err.message, true); }
-  });
-  $('hppTable').addEventListener('input', e => { const box = e.target.closest('.recipe-edit'); if (box) hppEditorCalc(box); });
-  $('hppTable').addEventListener('change', e => { const box = e.target.closest('.recipe-edit'); if (box) hppEditorCalc(box); });
-
   // ---- Cadangan
   $('backupBtn').addEventListener('click', async () => {
     $('backupBtn').disabled = true;
@@ -1609,6 +1643,27 @@
       toast('Cadangan data diunduh');
     } catch (err) { toast(err.message, true); }
     finally { $('backupBtn').disabled = false; }
+  });
+  $('restoreBtn').addEventListener('click', () => $('restoreFile').click());
+  $('restoreFile').addEventListener('change', async () => {
+    const file = $('restoreFile').files[0]; $('restoreFile').value = '';
+    if (!file) return;
+    let data;
+    try { const j = JSON.parse(await file.text()); data = j.data ?? j; }
+    catch { return toast('File ini bukan file cadangan (.json) yang benar', true); }
+    if (!data || !Array.isArray(data.orders) || !Array.isArray(data.products)) return toast('File ini bukan cadangan Kasir Lunpia Amoy', true);
+    if (!confirm(DB.demo
+      ? `Pulihkan cadangan "${file.name}"? Data contoh sekarang DIGANTI dengan isi file.`
+      : `Pulihkan cadangan "${file.name}" (${data.orders.length} nota, ${data.products.length} produk)?\n\nData yang tidak ada di kasir akan ditambahkan kembali. Data yang sekarang ada tidak diubah dan tidak dihapus.`)) return;
+    $('restoreBtn').disabled = true;
+    try {
+      const r = await DB.restore(data) || {};
+      const names = { nota: 'nota', produk: 'produk', riwayat_stok: 'riwayat stok', kas_harian: 'kas harian', kas_keluar: 'kas keluar', produksi: 'catatan produksi' };
+      const added = Object.entries(names).filter(([k]) => r[k]).map(([k, n]) => `${r[k]} ${n}`);
+      toast(added.length ? `Dipulihkan: ${added.join(', ')}` : 'Tidak ada data yang perlu dipulihkan, semua sudah ada');
+      await loadProducts(); refreshPendingCount();
+    } catch (err) { toast(err.message, true); }
+    finally { $('restoreBtn').disabled = false; }
   });
 
   // Ganti hari saat aplikasi tetap terbuka (mis. ditinggal semalaman): tanggal di Kas, "Hari ini" di
