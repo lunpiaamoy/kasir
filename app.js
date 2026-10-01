@@ -1943,7 +1943,7 @@
     try {
       const data = await DB.backup();
       const json = JSON.stringify({ aplikasi: 'Kasir Lunpia Amoy', dibuat: new Date().toISOString(), data }, null, 1);
-      saveFile(new Blob([json], { type: 'application/json' }), `cadangan-lunpia-amoy-${ymdLocal(new Date())}.json`);
+      saveFile(new Blob([json], { type: 'application/json' }), `AMOY ${ymdLocal(new Date()).replace(/-/g, ' ')}.json`);
       await DB.markBackup().catch(() => {});
       toast('Cadangan data diunduh. Simpan file ini di laptop atau Google Drive.');
       refreshNotices();
