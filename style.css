@@ -411,3 +411,10 @@ main { padding: 16px; max-width: 1280px; margin: 0 auto; }
 a.btn-link { display: inline-flex; align-items: center; text-decoration: none; }
 a.wa-link { color: var(--muted); font-weight: 500; }
 .cash-reset { margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; }
+
+/* Ubah baris (riwayat kas, kontak) */
+.cash-edit { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+.cash-edit label { margin: 0; display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; }
+.cash-edit label.grow, .cash-edit .grow { flex: 2 1 200px; }
+.cash-edit > b { flex-basis: 100%; }
+.cash-edit .actions { margin-top: 0; }
