@@ -147,6 +147,15 @@
         if (error?.code === 'PGRST204') ({ error } = await run({ day, opening }));
         fail(error);
       },
+      // Mulai ulang kas satu hari (pemilik): uang awal, hitungan, catatan, dan status tutup dikosongkan.
+      async resetCash(day) {
+        const base = { opening: 0, expected: null, counted: null, note: '', closed_at: null, closed_by: null };
+        const run = row => sb.from('cash_days').update(row).eq('day', day).select();
+        let { data, error } = await run({ ...base, opening_detail: null, counted_detail: null });
+        if (error?.code === 'PGRST204') ({ data, error } = await run(base));
+        fail(error);
+        if (!data.length) throw new Error('Kas tidak bisa dimulai ulang. Hanya pemilik yang bisa melakukannya.');
+      },
       async closeCash(day, f) {
         const { data: s } = await sb.auth.getSession();
         const run = row => sb.from('cash_days')
@@ -316,6 +325,11 @@
       async openCash(day, opening, opening_detail = null) {
         const db = load(); db.cash ||= {};
         db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening, opening_detail };
+        save();
+      },
+      async resetCash(day) {
+        const c = load().cash?.[day]; if (!c) return;
+        Object.assign(c, { opening: 0, opening_detail: null, expected: null, counted: null, counted_detail: null, note: '', closed_at: null, closed_by: null });
         save();
       },
       async closeCash(day, f) {
