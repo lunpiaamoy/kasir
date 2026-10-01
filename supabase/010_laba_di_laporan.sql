@@ -6,7 +6,7 @@
 --
 -- Laba pindah ke tab Laporan: wewenang "lihat laba" sekarang bagian dari tab Laporan,
 -- dan Laporan mengambil total bahan terpakai lewat fungsi material_used (tanpa perlu
--- wewenang membuka tab Pembelian).
+-- wewenang membuka tab Produksi).
 -- =====================================================================
 
 begin;
@@ -23,7 +23,7 @@ language sql immutable set search_path = public as $$
   }'::jsonb ->> p;
 $$;
 
--- Total bahan terpakai di rentang tanggal (sama dengan hitungan di tab Pembelian):
+-- Total bahan terpakai di rentang tanggal (sama dengan hitungan di tab Produksi):
 -- harga × (jumlah − sisa) / jumlah, termasuk baris "sisa lalu"
 create or replace function public.material_used(p_from date, p_to date) returns bigint
 language plpgsql stable security definer set search_path = public as $$

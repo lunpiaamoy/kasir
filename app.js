@@ -978,7 +978,7 @@
       <div class="metric"><small>Ongkir tercatat</small><b>Rp ${rp(ongkir)}</b><span>Di luar penjualan</span></div>
       ${canceled ? `<div class="metric"><small>Dibatalkan</small><b>${canceled}</b><span>Tidak dihitung</span></div>` : ''}
       <div class="metric need-laba" id="usedMetric"></div><div class="metric lead need-laba" id="profitMetric"></div>`;
-    // Laba = penjualan − bahan terpakai (dari tab Pembelian) di periode yang sama
+    // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama
     if (can('laba')) {
       const f = ymdLocal(from), t = ymdLocal(new Date(+to - 864e5));
       DB.materialUsed(f, t).then(used => {
@@ -1086,7 +1086,7 @@
     $('prodMetrics').innerHTML = (productions.length ? `
       <div class="metric"><small>1. Belanja bahan</small><b>Rp ${rp(bought)}</b><span>${productions.length} catatan</span></div>
       <div class="metric"><small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>${pcs ? `± Rp ${rp(Math.round(used / pcs))} per pcs` : 'Belum ada hasil produksi'}</span></div>
-      <div class="metric"><small>2. Diproduksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>`
+      <div class="metric"><small>2. Hasil produksi</small><b>${rp(pcs)} pcs</b><span>Terjual ${rp(valid.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0))} pcs</span></div>`
       : '<p class="muted">Belum ada catatan pembelian &amp; produksi di periode ini.</p>') + `
       <div class="metric"><small>3. Sisa bahan sekarang</small><b>Rp ${rp(stockValue)}</b><span>${stockNow.length ? `${stockNow.length} bahan` : 'Tidak ada sisa'}</span></div>
 `;
@@ -1739,7 +1739,7 @@
         kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar' }],
     ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
       { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
-    ['pembelian', 'Tab Pembelian', 'Lihat pembelian bahan, produksi & sisa bahan',
+    ['pembelian', 'Tab Produksi', 'Lihat pembelian bahan, hasil produksi & sisa bahan',
       { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan' }],
     ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
   ];

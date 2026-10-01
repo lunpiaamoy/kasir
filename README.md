@@ -10,8 +10,8 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 - **Pengaturan** (pemilik, tombol di bilah atas): kelola **staf** (tambah kasir, ganti peran, **wewenang per kasir**, **ganti password** tiap akun, hapus), **unduh cadangan semua data**, dan **pulihkan dari cadangan** (data di file yang tidak ada di kasir ditambahkan kembali; data yang ada tidak diubah atau dihapus; daftar staf tidak ikut).
 - **Kontak**: daftar pembeli yang disusun otomatis dari nama & nomor WA di transaksi (satu kontak per nomor), lengkap dengan jumlah transaksi, total belanja, dan tanggal terakhir beli. Bisa dicari, diurutkan, dan tombol **Pesan baru** langsung mengisi nama & WA di kasir, dan tombol **WhatsApp** membuka chat pembeli dengan salam "Hai Kak {nama}.".
 - **Stok**: tambah stok, koreksi stok, **stok opname** (isi hitungan fisik, lihat selisihnya, lalu stok sistem disamakan), tambah atau ubah produk, dan peringatan stok menipis. Tombol **Kartu stok** di tiap produk menampilkan mutasi stok (masuk, terjual, batal, koreksi) per tanggal lengkap dengan saldo, untuk bulan ini, bulan lalu, 3 bulan, atau rentang tanggal pilihan.
-- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, **jam ramai** (transaksi per jam dengan tanda Ramai/Sepi), tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**. **Laba** (penjualan − bahan terpakai dari tab Pembelian) juga tampil di Laporan untuk yang berwenang.
-- **Pembelian** (tab tersendiri): catat belanja bahan (kulit, telur, rebung, ayam, udang, …) dengan harga dan sisanya, serta berapa pcs tiap produk yang jadi. Tampilan berurutan: **1. pembelian bahan**, **2. produksi** (diproduksi vs terjual), **3. sisa bahan sekarang**, lalu catatan per tanggal. Hasil produksi langsung menambah stok; sisa bahan otomatis dibawa ke catatan berikutnya sebagai baris "sisa lalu".
+- **Laporan**: penjualan hari ini, kemarin, 7 hari, bulan ini, tahun ini, tahun lalu, atau rentang tanggal pilihan, dengan grafik, **jam ramai** (transaksi per jam dengan tanda Ramai/Sepi), tunai dan QRIS terpisah, produk terlaris, rekap per hari/bulan, dan **unduh Excel (CSV)**. **Laba** (penjualan − bahan terpakai dari tab Produksi) juga tampil di Laporan untuk yang berwenang.
+- **Produksi** (tab tersendiri): catat belanja bahan (kulit, telur, rebung, ayam, udang, …) dengan harga dan sisanya, serta berapa pcs tiap produk yang jadi. Tampilan berurutan: **1. pembelian bahan**, **2. produksi** (diproduksi vs terjual), **3. sisa bahan sekarang**, lalu catatan per tanggal. Hasil produksi langsung menambah stok; sisa bahan otomatis dibawa ke catatan berikutnya sebagai baris "sisa lalu".
 - **Kas** (tab tersendiri): isi uang awal saat buka dan hitung uang di laci saat **tutup kasir**, keduanya **per pecahan** (100.000 sampai 1.000; koin ratusan tidak dihitung). Catat **kas keluar** (beli bahan, bensin, bayar kurir) supaya selisih jujur. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai + ongkir yang dibayar tunai − kas keluar) dan selisihnya. **Riwayat kas** bisa dilihat per **hari** (31 hari), **minggu**, **bulan**, atau **tahun** (jumlah hari, lebih/kurang, total selisih, kas keluar).
 
 ## Pemilik dan kasir
@@ -25,7 +25,7 @@ Pemilik selalu boleh semuanya. Wewenang tiap kasir diatur pemilik **per tab** di
 | Stok | ✅ | ✅ tambah stok masuk · ❌ kurangi stok · ❌ stok opname · ❌ tambah produk · ❌ ubah produk & harga |
 | Kas | ✅ | ✅ uang awal · ✅ tutup kasir · ✅ kas keluar · ❌ ubah kas yang sudah ditutup · ❌ hapus riwayat kas |
 | Laporan | ✅ | ✅ unduh Excel · ❌ lihat laba |
-| Pembelian | ❌ | ❌ catat & ubah · ❌ hapus |
+| Produksi | ❌ | ❌ catat & ubah · ❌ hapus |
 | Kontak | ✅ | ❌ ubah kontak · ❌ hapus kontak |
 
 Pengaturan (staf, wewenang, password, cadangan) khusus pemilik.

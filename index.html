@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=32">
+<link rel="stylesheet" href="style.css?v=33">
 </head>
 <body>
 
@@ -28,7 +28,7 @@
     <button class="tab need-stok" data-tab="stok">Stok <span class="count warn" id="lowCount" hidden></span></button>
     <button class="tab need-kas" data-tab="kas">Kas</button>
     <button class="tab need-laporan" data-tab="laporan">Laporan</button>
-    <button class="tab need-pembelian" data-tab="pembelian">Pembelian</button>
+    <button class="tab need-pembelian" data-tab="pembelian">Produksi</button>
     <button class="tab need-kontak" data-tab="kontak">Kontak</button>
   </nav>
   <div class="who">
@@ -224,10 +224,10 @@
     </section>
   </section>
 
-  <!-- ============ Pembelian bahan & produksi ============ -->
+  <!-- ============ Produksi (pembelian bahan, hasil, sisa) ============ -->
   <section class="view" id="view-pembelian" hidden>
     <div class="view-head">
-      <h2>Pembelian bahan &amp; produksi</h2>
+      <h2>Produksi</h2>
       <button class="primary small need-pembelian_catat" id="prodAddBtn">+ Catat pembelian &amp; produksi</button>
     </div>
     <div class="range">
@@ -255,7 +255,7 @@
       <div class="table-wrap"><table class="table" id="prodBuyTable"></table></div>
     </section>
     <section class="panel prod-sec">
-      <h3>2. Produksi</h3>
+      <h3>2. Hasil produksi</h3>
       <div class="table-wrap"><table class="table" id="prodOutTable"></table></div>
     </section>
     <section class="panel prod-sec">
@@ -361,9 +361,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=32"></script>
-<script src="db.js?v=32"></script>
-<script src="app.js?v=32"></script>
+<script src="config.js?v=33"></script>
+<script src="db.js?v=33"></script>
+<script src="app.js?v=33"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
