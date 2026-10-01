@@ -14,6 +14,8 @@ Aplikasi kasir dan stok berbasis web untuk Lunpia Amoy, Jl. Jagalan 70, Semarang
 - **Produksi** (tab tersendiri): catat belanja bahan (kulit, telur, rebung, ayam, udang, …) dengan harga dan sisanya, serta berapa pcs tiap produk yang jadi. Tampilan berurutan: **1. pembelian bahan**, **2. produksi** (diproduksi vs terjual), **3. sisa bahan sekarang**, lalu catatan per tanggal. Hasil produksi langsung menambah stok; sisa bahan otomatis dibawa ke catatan berikutnya sebagai baris "sisa lalu".
 - **Kas** (tab tersendiri): isi uang awal saat buka dan hitung uang di laci saat **tutup kasir**, keduanya **per pecahan** (100.000 sampai 1.000; koin ratusan tidak dihitung). Catat **kas keluar** (beli bahan, bensin, bayar kurir) supaya selisih jujur. Aplikasi menghitung uang yang seharusnya ada (uang awal + penjualan tunai + ongkir yang dibayar tunai − kas keluar) dan selisihnya. **Riwayat kas** bisa dilihat per **hari** (31 hari), **minggu**, **bulan**, atau **tahun** (jumlah hari, lebih/kurang, total selisih, kas keluar).
 
+- **Online / offline**: tanda di bilah atas (hijau Online, merah Offline). Saat offline muncul peringatan bahwa transaksi belum bisa disimpan; begitu tersambung lagi data diambil ulang otomatis. Tombol **↻ Segarkan** mengambil ulang semua data dari server dan memeriksa versi aplikasi. Kalau ada versi baru, muncul tombol **Perbarui sekarang** (tidak perlu Cmd+Shift+R).
+
 ## Pemilik dan kasir
 
 Pemilik selalu boleh semuanya. Wewenang tiap kasir diatur pemilik **per tab** di **Pengaturan → Staf → Wewenang**: centang tab yang boleh dibuka, lalu pilihan di dalamnya. Bawaannya:

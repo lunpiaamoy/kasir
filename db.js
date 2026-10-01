@@ -31,6 +31,8 @@
     if (!error) return;
     if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
     if (error.code === '42501') throw new Error(DENIED_MSG);
+    if (/Failed to fetch|NetworkError|Load failed|network/i.test(error.message || ''))
+      throw new Error('Tidak tersambung ke server (offline). Periksa internet, lalu coba lagi.');
     throw new Error(error.message || String(error));
   }
 
@@ -63,6 +65,13 @@
     return {
       demo: false,
       async session() { const { data } = await sb.auth.getSession(); return data.session; },
+      // Cek koneksi ke server (database) — true kalau server menjawab
+      async ping() {
+        try {
+          const r = await fetch(cfg.SUPABASE_URL + '/rest/v1/', { method: 'HEAD', cache: 'no-store', headers: { apikey: cfg.SUPABASE_ANON_KEY } });
+          return r.status < 500;
+        } catch { return false; }
+      },
       // Callback dijalankan lewat setTimeout: memanggil Supabase langsung di dalam
       // onAuthStateChange bisa membuat supabase-js macet (deadlock) saat login/refresh.
       onAuth(cb) { sb.auth.onAuthStateChange((_e, s) => { setTimeout(() => cb(s), 0); }); },
@@ -345,6 +354,7 @@
       async signOut() { signedIn = false; },
       // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
       async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },
+      async ping() { return navigator.onLine; },
       permDefaults: PERM_DEFAULTS, permParent: PERM_PARENT,
       // Wewenang saat mencoba sebagai kasir diambil dari akun contoh di daftar staf
       async myPerms(role) { return permsFor(role, (load().staff || []).find(x => x.email === 'contoh@lunpia.local')?.perms); },
