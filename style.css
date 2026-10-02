@@ -577,3 +577,4 @@ h3.sub { margin-top: 18px; }
   .table.cards tr[class$="-row"] td, .table.cards td[colspan] { display: block; text-align: left; }
   .table.cards td input:not([type=checkbox]) { max-width: 60%; }
 }
+.add-stock .pw-new { width: 200px; }

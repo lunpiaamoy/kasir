@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 013, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 014, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
@@ -228,8 +228,14 @@
       async materialUsed(fromDay, toDay) {
         const { data, error } = await sb.rpc('material_used', { p_from: fromDay, p_to: toDay }); fail(error); return Number(data) || 0;
       },
+      // Membuat akun login (kalau belum ada) atau mengganti password-nya (014)
       async setStaffPassword(email, password) {
         const { error } = await sb.rpc('set_staff_password', { p_email: email, p_password: password }); fail(error);
+      },
+      // Email staf yang sudah punya akun login; null = belum bisa dicek (014 belum dijalankan)
+      async staffLogins() {
+        const { data, error } = await sb.rpc('staff_logins');
+        return error ? null : new Set(data.map(e => (typeof e === 'string' ? e : Object.values(e)[0]).toLowerCase()));
       },
       // Pulihkan: data di file yang belum ada di database ditambahkan (006); data yang ada tidak diubah
       async restore(data) {
@@ -602,7 +608,9 @@
       },
       async setStaffPassword(email, password) {
         if (password.length < 6) throw new Error('Password minimal 6 karakter');
+        const db = load(); (db.logins ||= ['contoh@lunpia.local']); if (!db.logins.includes(email)) db.logins.push(email); save();
       },
+      async staffLogins() { return new Set(load().logins || ['contoh@lunpia.local']); },
       // Mode contoh: cadangan dari mode contoh menggantikan data contoh
       async restore(data) {
         if (!data || !Array.isArray(data.products) || data.nextId == null)

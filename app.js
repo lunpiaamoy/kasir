@@ -1887,23 +1887,26 @@
   async function renderStaff() {
     let list;
     try { list = staffList = await DB.listStaff(); } catch (e) { $('staffTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
+    const logins = await DB.staffLogins().catch(() => null);   // null = belum bisa dicek
+    const hasLogin = st => !logins || logins.has(st.email.toLowerCase());
     $('staffTable').innerHTML = `<thead><tr><th>Email</th><th>Nama</th><th>Peran</th><th></th></tr></thead><tbody>
       ${list.map(st => `<tr data-email="${esc(st.email)}">
-        <td>${esc(st.email)}</td>
+        <td>${esc(st.email)}${logins ? `<div class="perm-sum ${hasLogin(st) ? 'muted' : 'warn-text'}">${hasLogin(st) ? 'Akun login aktif' : 'Belum punya akun login'}</div>` : ''}</td>
         <td><input data-f="name" value="${esc(st.name || '')}" aria-label="Nama"></td>
         <td>${roleSelect(st.role)}
           <div class="muted perm-sum">${st.role === 'pemilik' ? 'Semua wewenang'
             : `${Object.keys(DB.permDefaults).filter(k => permOf(st, k)).length} dari ${Object.keys(DB.permDefaults).length} wewenang${st.cash_out_max ? ` · kas keluar maks ${rp(st.cash_out_max)}` : ''}`}</div></td>
         <td><div class="add-stock"><button class="ghost small" data-staffsave>Simpan</button>
           ${st.role === 'pemilik' ? '' : '<button class="ghost small" data-staffperm>Wewenang</button>'}
-          <button class="ghost small" data-staffpw>Password</button>
+          <button class="ghost small${hasLogin(st) ? '' : ' primary'}" data-staffpw>${hasLogin(st) ? 'Password' : 'Buat akun login'}</button>
           <button class="ghost small danger" data-staffdel>Hapus</button></div></td>
       </tr>`).join('')}
       <tr class="new-row">
         <td><input data-f="email" type="email" placeholder="email@gmail.com" aria-label="Email staf baru"></td>
         <td><input data-f="name" placeholder="Nama" aria-label="Nama staf baru"></td>
         <td>${roleSelect('kasir')}</td>
-        <td><button class="primary small" data-staffadd>Tambah staf</button></td>
+        <td><div class="add-stock"><input data-f="newpw" type="password" autocomplete="new-password" placeholder="Password login (min. 6)" aria-label="Password login staf baru" class="pw-new">
+          <button class="primary small" data-staffadd>Tambah staf</button></div></td>
       </tr></tbody>`;
   }
   // Tab tidak dicentang → pilihan di dalamnya mati
@@ -1986,11 +1989,19 @@
         try { await DB.setStaffPassword(row.dataset.email, pw); }
         finally { b.disabled = false; }
         row.remove();
-        return toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : `Password ${row.dataset.email} diubah`);
+        renderStaff();
+        return toast(DB.demo ? 'Mode contoh: password tidak benar-benar diubah' : `Password ${row.dataset.email} disimpan. Akun ini bisa langsung dipakai masuk ke kasir.`);
       }
       if ('staffadd' in b.dataset) {
         if (!f('email')) return toast('Isi email staf', true);
-        await DB.saveStaff(f('email'), f('name'), f('role')); toast(`Staf ${f('email')} ditambahkan`);
+        const pw = row.querySelector('[data-f="newpw"]').value;
+        if (pw && pw.length < 6) return toast('Password minimal 6 karakter', true);
+        await DB.saveStaff(f('email'), f('name'), f('role'));
+        if (pw) {
+          try { await DB.setStaffPassword(f('email').toLowerCase(), pw); }
+          catch (err) { toast(`Staf ditambahkan, tapi akun login gagal dibuat: ${err.message}`, true); return renderStaff(); }
+          toast(`Staf ${f('email')} ditambahkan, akun login dibuat. Beri tahu password-nya ke pegawai.`);
+        } else toast(`Staf ${f('email')} ditambahkan. Buat akun login-nya dengan tombol "Buat akun login".`);
       } else if ('staffsave' in b.dataset) {
         await DB.saveStaff(row.dataset.email, f('name'), f('role')); toast('Staf disimpan');
       } else if ('staffdel' in b.dataset) {

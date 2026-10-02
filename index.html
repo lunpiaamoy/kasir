@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=41">
+<link rel="stylesheet" href="style.css?v=42">
 </head>
 <body>
 
@@ -215,10 +215,9 @@
 
     <section class="panel owner-only">
       <h3>Staf</h3>
-      <p class="muted hint">Staf baru otomatis bisa memakai kasir setelah akun login-nya dibuat di Supabase:
-        <b>Authentication → Users → Add user</b> (email yang sama, centang <b>Auto Confirm User</b>).
-        Menghapus staf di sini mencabut aksesnya ke kasir. Tombol <b>Password</b> mengganti password login akun tersebut
-        (termasuk akun Anda sendiri); beri tahu password barunya ke pegawai.</p>
+      <p class="muted hint">Tambah staf: isi email, nama, peran, dan <b>password</b>, maka akun login-nya langsung dibuat dan bisa dipakai
+        masuk ke kasir. Tombol <b>Password</b> mengganti password (termasuk akun Anda sendiri); beri tahu password barunya ke pegawai.
+        Menghapus staf di sini mencabut aksesnya ke kasir.</p>
       <div class="table-wrap"><table class="table" id="staffTable"></table></div>
     </section>
 
@@ -383,9 +382,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=41"></script>
-<script src="db.js?v=41"></script>
-<script src="app.js?v=41"></script>
+<script src="config.js?v=42"></script>
+<script src="db.js?v=42"></script>
+<script src="app.js?v=42"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
