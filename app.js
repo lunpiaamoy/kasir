@@ -76,6 +76,18 @@
   let currentTab = 'kasir';
 
   ['recentTable', 'contactTable', 'stockTable', 'topTable', 'dailyTable', 'hourTable', 'cashHistory', 'prodOutTable', 'prodBuyTable', 'prodLeftTable', 'prodTable', 'logTable'].forEach(makeSortable);
+  // HP & tablet tegak: tabel lebar ditampilkan sebagai kartu (lihat .table.cards di style.css).
+  // Tiap sel diberi label dari judul kolomnya.
+  function labelCells(table) {
+    const heads = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach(tr => [...tr.cells].forEach((td, i) => {
+      if (td.colSpan === 1 && td.dataset.label === undefined) td.dataset.label = heads[i] || '';
+    }));
+  }
+  ['recentTable', 'stockTable', 'contactTable', 'cashHistory', 'prodTable', 'prodBuyTable', 'prodOutTable', 'logTable', 'staffTable'].forEach(id => {
+    const t = $(id); t.classList.add('cards');
+    new MutationObserver(() => labelCells(t)).observe(t, { childList: true, subtree: true });
+  });
 
   // ---------------------------------------------------------------- Auth & start
   async function boot() {

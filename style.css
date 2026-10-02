@@ -549,3 +549,31 @@ h3.sub { margin-top: 18px; }
 .denom-total { grid-column: 1 / -1; }
 .net.live i { box-shadow: 0 0 0 3px var(--ok-tint); }
 .add-stock button { white-space: nowrap; }
+
+/* ---------- Nyaman di HP & tablet ---------- */
+.add-stock { flex-wrap: wrap; }
+/* Layar sentuh: huruf isian 16px (iPhone/iPad tidak memperbesar layar sendiri), tombol minimal 40px */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  button:not(.link):not(.tab), .btn-link { min-height: 40px; }
+  .seg button { min-height: 40px; }
+  .denom { grid-template-columns: 76px 12px 72px 90px; }
+}
+/* HP & tablet tegak: tabel lebar jadi kartu bertumpuk (label di kiri, isi di kanan), tanpa geser */
+@media (max-width: 820px) {
+  .table.cards thead { display: none; }
+  .table.cards, .table.cards tbody, .table.cards tr { display: block; width: 100%; }
+  .table.cards tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .table.cards tr:last-child { border-bottom: 0; }
+  .table.cards td { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 3px 0; border: 0; text-align: right; min-height: 30px; }
+  .table.cards td::before { content: attr(data-label); flex: none; font-size: 12px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; text-align: left; }
+  .table.cards td[data-label=""]::before, .table.cards td:not([data-label])::before { content: none; }
+  .table.cards td[data-label=""] { justify-content: flex-end; padding-top: 8px; }
+  .table.cards td:empty { display: none; }
+  .table.cards td .add-stock { justify-content: flex-end; }
+  .table.cards td.empty { display: block; text-align: center; }
+  .table.cards tr[class$="-row"] td, .table.cards td[colspan] { display: block; text-align: left; }
+  .table.cards td input:not([type=checkbox]) { max-width: 60%; }
+}
