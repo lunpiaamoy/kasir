@@ -7,19 +7,19 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 012, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 013, yang belum) di Supabase (SQL Editor → Run).';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
   const PERM_DEFAULTS = {
     pesanan: true, batal: true, ubah_nota: false, hapus_nota: false,
-    stok: true, stok_masuk: true, stok_kurang: false, opname: false, produk_tambah: false, produk_ubah: false,
+    stok: true, stok_masuk: true, stok_pindah: true, stok_kurang: false, opname: false, produk_tambah: false, produk_ubah: false,
     kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false,
     laporan: true, laporan_unduh: true,
     pembelian: false, pembelian_catat: false, pembelian_hapus: false, laba: false,
     kontak: true, kontak_ubah: false, kontak_hapus: false };
   const PERM_PARENT = {};
-  [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_kurang opname produk_tambah produk_ubah'],
+  [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_pindah stok_kurang opname produk_tambah produk_ubah'],
    ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh laba'],
    ['pembelian', 'pembelian_catat pembelian_hapus'], ['kontak', 'kontak_ubah kontak_hapus']]
     .forEach(([tab, keys]) => keys.split(' ').forEach(k => (PERM_PARENT[k] = tab)));
@@ -41,7 +41,7 @@
   // (sebelum waktu batal dicatat) tidak ditampilkan sama sekali karena efeknya nol.
   function cardEvents(moves, orderRows, fromIso) {
     const from = new Date(fromIso);
-    const ev = moves.map(m => ({ at: m.created_at, delta: m.delta, note: m.note, by: m.created_by }));
+    const ev = moves.map(m => ({ at: m.created_at, delta: m.delta, home: m.home_delta || 0, note: m.note, by: m.created_by }));
     orderRows.forEach(o => {
       if (new Date(o.created_at) >= from) ev.push({ at: o.created_at, delta: -o.qty, order: o, by: o.cashier });
       if (o.status === 'batal' && o.cancelled_at && new Date(o.cancelled_at) >= from)
@@ -128,10 +128,16 @@
         const q = p.id ? sb.from('products').update(row).eq('id', p.id) : sb.from('products').insert({ ...row, stock: 0 });
         const { error } = await q; fail(error);
       },
-      async addStock(id, delta, note) {
-        const { error } = await sb.rpc('add_stock', { p_product: id, p_delta: delta, p_note: note }); fail(error);
+      // location: 'toko' atau 'rumah' (013)
+      async addStock(id, delta, note, location = 'toko') {
+        let { error } = await sb.rpc('add_stock', { p_product: id, p_delta: delta, p_note: note, p_location: location });
+        if (error?.code === 'PGRST202' && location === 'toko')   // sebelum 013: tanpa lokasi
+          ({ error } = await sb.rpc('add_stock', { p_product: id, p_delta: delta, p_note: note }));
+        fail(error);
       },
-      // [{ product_id, counted }] → jumlah produk yang stoknya disesuaikan
+      // Pindah stok antar tempat; to = 'toko' (dari rumah) atau 'rumah' (dari toko)
+      async moveStock(id, qty, to) { const { error } = await sb.rpc('move_stock', { p_product: id, p_qty: qty, p_to: to }); fail(error); },
+      // [{ product_id, toko, rumah }] → jumlah produk yang stoknya disesuaikan
       async stockOpname(list) { const { data, error } = await sb.rpc('stock_opname', { p: list }); fail(error); return data; },
 
       async createOrder(payload) {
@@ -181,7 +187,7 @@
       async stockCard(productId, fromIso) {
         const cols = 'id, qty, orders!inner(created_at, cancelled_at, status, year, seq, customer_name, cashier)';
         const [moves, sold, cancelled] = await Promise.all([
-          all(() => sb.from('stock_moves').select('id, delta, note, created_by, created_at')
+          all(() => sb.from('stock_moves').select('*')
             .eq('product_id', productId).gte('created_at', fromIso).order('id')),
           all(() => sb.from('order_items').select(cols)
             .eq('product_id', productId).gte('orders.created_at', fromIso).neq('orders.status', 'batal').order('id')),
@@ -341,14 +347,14 @@
     const clone = x => JSON.parse(JSON.stringify(x));
     const jakartaYear = () => Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date()));
     const dmyStr = d => d.split('-').reverse().join('/');
-    const demoProdStock = (db, oldOut, newOut, note) => {
-      const d = new Map();
-      newOut.forEach(o => d.set(o.product_id, (d.get(o.product_id) || 0) + o.qty));
-      oldOut.forEach(o => d.set(o.product_id, (d.get(o.product_id) || 0) - o.qty));
-      d.forEach((delta, id) => {
-        const p = db.products.find(x => x.id === id); if (!p || !delta) return;
-        p.stock += delta;
-        (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+    const demoProdStock = (db, oldOut, newOut, note, oldHome = false, newHome = false) => {
+      const d = new Map(), h = new Map(), add = (m, k, v) => m.set(k, (m.get(k) || 0) + v);
+      newOut.forEach(o => { add(d, o.product_id, o.qty); if (newHome) add(h, o.product_id, o.qty); });
+      oldOut.forEach(o => { add(d, o.product_id, -o.qty); if (oldHome) add(h, o.product_id, -o.qty); });
+      new Set([...d.keys(), ...h.keys()]).forEach(id => {
+        const p = db.products.find(x => x.id === id), delta = d.get(id) || 0, hd = h.get(id) || 0; if (!p || (!delta && !hd)) return;
+        p.stock += delta; p.stock_home = Math.max(0, (p.stock_home || 0) + hd);
+        (db.moves ||= []).push({ product_id: id, delta, home_delta: hd, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
       });
     };
     // Catatan aktivitas di mode contoh (meniru pemicu di database, 011)
@@ -397,21 +403,36 @@
         else db.products.push({ ...p, id: db.nextId++, stock: 0 });
         save();
       },
-      async addStock(id, delta, note = '') {
-        const db = load();
-        const prod = db.products.find(x => x.id === id); prod.stock += delta;
+      async addStock(id, delta, note = '', location = 'toko') {
+        const db = load(), home = location === 'rumah';
+        const prod = db.products.find(x => x.id === id);
+        if (home && (prod.stock_home || 0) + delta < 0) throw new Error(`Stok di rumah hanya ${prod.stock_home || 0}`);
+        prod.stock += delta; if (home) prod.stock_home = (prod.stock_home || 0) + delta;
         if (delta < 0) demoLog(db, 'stok', `${prod.category} ${prod.name}`, { delta, note });
-        (db.moves ||= []).push({ product_id: id, delta, note, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+        (db.moves ||= []).push({ product_id: id, delta, home_delta: home ? delta : 0, note: note + (home ? ' (rumah)' : ''),
+          created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+        save();
+      },
+      async moveStock(id, qty, to) {
+        const db = load(), p = db.products.find(x => x.id === id), home = p.stock_home || 0;
+        if (to === 'toko' && home < qty) throw new Error(`Stok di rumah hanya ${home}`);
+        if (to === 'rumah' && p.stock - home < qty) throw new Error(`Stok di toko hanya ${Math.max(p.stock - home, 0)}`);
+        p.stock_home = home + (to === 'rumah' ? qty : -qty);
+        (db.moves ||= []).push({ product_id: id, delta: 0, home_delta: to === 'rumah' ? qty : -qty,
+          note: `Pindah ${to === 'toko' ? 'rumah → toko' : 'toko → rumah'} ${qty}`, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
       },
       async stockOpname(list) {
         const db = load(); let n = 0;
-        list.forEach(({ product_id, counted }) => {
-          const p = db.products.find(x => x.id === product_id);
-          if (!p || counted === p.stock) return;
-          (db.moves ||= []).push({ product_id, delta: counted - p.stock, note: `Stok opname · sistem ${p.stock}, fisik ${counted}`,
-            created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
-          p.stock = counted; n++;
+        list.forEach(x => {
+          const p = db.products.find(y => y.id === x.product_id); if (!p) return;
+          const oldHome = p.stock_home || 0, oldToko = p.stock - oldHome;
+          const home = x.rumah ?? (x.counted != null ? Math.min(oldHome, x.counted) : oldHome);
+          const total = x.counted ?? ((x.toko ?? oldToko) + home);
+          if (total === p.stock && home === oldHome) return;
+          (db.moves ||= []).push({ product_id: p.id, delta: total - p.stock, home_delta: home - oldHome,
+            note: `Stok opname · toko ${oldToko}→${total - home}, rumah ${oldHome}→${home}`, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
+          p.stock = total; p.stock_home = home; n++;
         });
         save(); return n;
       },
@@ -565,16 +586,18 @@
       // Sama dengan save_production/delete_production di database: stok bertambah sebesar selisihnya
       async saveProduction(x) {
         const db = load(), list = db.productions ||= [];
-        const row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note, stocked: x.stocked !== false };
+        const row = { day: x.day, purchases: x.purchases, outputs: x.outputs, note: x.note, stocked: x.stocked !== false,
+          location: x.location === 'rumah' ? 'rumah' : 'toko' };
         const old = x.id ? list.find(p => p.id === x.id) : null;
-        demoProdStock(db, old?.stocked ? old.outputs : [], row.stocked ? row.outputs : [], `Produksi ${dmyStr(row.day)}${old ? ' (diubah)' : ''}`);
+        demoProdStock(db, old?.stocked ? old.outputs : [], row.stocked ? row.outputs : [],
+          `Produksi ${dmyStr(row.day)}${old ? ' (diubah)' : row.location === 'rumah' ? ' (rumah)' : ''}`, old?.location === 'rumah', row.location === 'rumah');
         if (old) Object.assign(old, row);
         else list.push({ id: db.nextId++, ...row, created_by: 'contoh@lunpia.local', created_at: new Date().toISOString() });
         save();
       },
       async deleteProduction(id) {
         const db = load(), old = (db.productions || []).find(p => p.id === id); if (!old) return;
-        if (old.stocked) demoProdStock(db, old.outputs, [], `Produksi ${dmyStr(old.day)} (dihapus)`);
+        if (old.stocked) demoProdStock(db, old.outputs, [], `Produksi ${dmyStr(old.day)} (dihapus)`, old.location === 'rumah', false);
         db.productions = db.productions.filter(p => p.id !== id); save();
       },
       async setStaffPassword(email, password) {

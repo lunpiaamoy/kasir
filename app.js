@@ -168,6 +168,8 @@
     renderCatalog(); renderCart(); renderStock();
   }
 
+  // Stok di dua tempat (013): stock = total, stock_home = di rumah, toko = sisanya. Penjualan dari toko.
+  const homeOf = p => p.stock_home || 0, tokoOf = p => p.stock - homeOf(p);
   function stockChip(p) {
     if (p.stock <= 0) return `<span class="chip bad">${p.stock < 0 ? 'Kurang ' + Math.abs(p.stock) : 'Habis'}</span>`;
     if (p.stock <= p.min_stock) return `<span class="chip warn">Sisa ${p.stock}</span>`;
@@ -742,28 +744,34 @@
   let editingId = null;
   function renderStock() {
     const low = products.filter(p => p.active && p.stock <= p.min_stock);
-    $('stockSummary').innerHTML = low.length
+    const tokoEmpty = products.filter(p => p.active && tokoOf(p) <= 0 && homeOf(p) > 0);
+    $('stockSummary').innerHTML = (low.length
       ? `<b>${low.length} produk stok menipis:</b> ${low.map(p => esc(p.category + ' ' + p.name)).join(', ')}.`
-      : 'Semua stok aman.';
+      : 'Semua stok aman.') + (tokoEmpty.length
+      ? `<br><b class="warn-text">Toko kosong, ada di rumah:</b> ${tokoEmpty.map(p => esc(`${p.category} ${p.name} (${homeOf(p)})`)).join(', ')}.` : '');
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
     $('stockTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Stok</th><th>Status</th><th data-nosort>Tambah stok</th><th></th></tr></thead>
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort>Tambah stok</th><th></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
         <tr class="${p.active ? '' : 'dim'}">
           <td>${esc(p.category)}</td>
           <td><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
           <td class="num">${rp(p.price)}</td>
-          <td class="num stock-num">${p.stock}</td>
+          <td class="num stock-num${tokoOf(p) <= 0 ? ' out' : ''}">${tokoOf(p)}</td>
+          <td class="num stock-num">${homeOf(p)}</td>
+          <td class="num stock-num total">${p.stock}</td>
           <td data-sort="${p.stock - p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'} <span class="muted">min ${p.min_stock}</span></td>
           <td><div class="add-stock need-stok_ubah">
             <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
+            <select id="loc-${p.id}" aria-label="Lokasi"><option value="toko">di Toko</option><option value="rumah">di Rumah</option></select>
             <button class="ghost small" data-addstock="${p.id}">Tambah</button>
           </div></td>
           <td><div class="add-stock">
+            <button class="ghost small need-stok_pindah" data-move="${p.id}">Pindah</button>
             <button class="ghost small" data-card="${p.id}">Kartu stok</button>
             <button class="ghost small need-produk_ubah" data-edit="${p.id}">Ubah</button>
           </div></td>
-        </tr>`).join('') : '<tr><td class="empty" colspan="7">Belum ada produk.</td></tr>'}</tbody>`;
+        </tr>`).join('') : '<tr><td class="empty" colspan="9">Belum ada produk.</td></tr>'}</tbody>`;
   }
 
   $('stockTable').addEventListener('click', async e => {
@@ -775,7 +783,28 @@
       if (!n) return toast('Isi jumlah stok yang mau ditambahkan', true);
       if (n < 0 && !can('stok_kurang')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
       if (n > 0 && !can('stok_masuk')) return toast('Akun ini tidak punya wewenang menambah stok', true);
-      try { await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok'); toast(`Stok ${byId(id).name} ${n > 0 ? '+' : ''}${n}`); loadProducts(); }
+      const loc = $('loc-' + id).value;
+      try { await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok', loc); toast(`Stok ${byId(id).name} di ${loc} ${n > 0 ? '+' : ''}${n}`); loadProducts(); }
+      catch (err) { toast(err.message, true); }
+    }
+    // Pindah stok rumah ↔ toko
+    if (t.dataset.move) {
+      $('stockTable').querySelector('.move-row')?.remove();
+      const p = byId(Number(t.dataset.move));
+      t.closest('tr').insertAdjacentHTML('afterend', `<tr class="move-row" data-id="${p.id}"><td colspan="9"><div class="move-stock">
+        <b>Pindah ${esc(p.category)} ${esc(p.name)}</b>
+        <span class="muted">Toko ${tokoOf(p)} · Rumah ${homeOf(p)}</span>
+        <input inputmode="numeric" data-mv="qty" placeholder="Jumlah" aria-label="Jumlah dipindah">
+        <select data-mv="to" aria-label="Arah"><option value="toko"${homeOf(p) ? ' selected' : ''}>Rumah → Toko</option><option value="rumah"${homeOf(p) ? '' : ' selected'}>Toko → Rumah</option></select>
+        <button class="primary small" data-movesave>Pindahkan</button><button class="ghost small" data-movecancel>Batal</button>
+      </div></td></tr>`);
+      t.closest('tr').nextElementSibling.querySelector('input').focus();
+    }
+    if ('movecancel' in t.dataset) t.closest('tr').remove();
+    if ('movesave' in t.dataset) {
+      const row = t.closest('tr'), id = Number(row.dataset.id), qty = toInt(row.querySelector('[data-mv="qty"]').value), to = row.querySelector('[data-mv="to"]').value;
+      if (!qty) return toast('Isi jumlah yang dipindah', true);
+      try { await DB.moveStock(id, qty, to); toast(`${qty} ${byId(id).name} dipindah ke ${to}`); loadProducts(); }
       catch (err) { toast(err.message, true); }
     }
     if (t.dataset.edit) openProductForm(byId(Number(t.dataset.edit)));
@@ -790,34 +819,44 @@
     $('productForm').hidden = true;
     const list = products.filter(p => p.active);
     $('opnameTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Sistem</th><th>Fisik</th><th class="num">Selisih</th></tr></thead>
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Sistem toko</th><th>Fisik toko</th><th class="num">Sistem rumah</th><th>Fisik rumah</th><th class="num">Selisih</th></tr></thead>
       <tbody>${list.map(p => `<tr>
         <td>${esc(p.category)}</td><td><b>${esc(p.name)}</b></td>
-        <td class="num stock-num">${p.stock}</td>
-        <td><input class="count-in" inputmode="numeric" data-count="${p.id}" aria-label="Hitungan fisik ${esc(p.category + ' ' + p.name)}"></td>
+        <td class="num stock-num">${tokoOf(p)}</td>
+        <td><input class="count-in" inputmode="numeric" data-count="${p.id}" data-loc="toko" aria-label="Hitungan fisik toko ${esc(p.category + ' ' + p.name)}"></td>
+        <td class="num stock-num">${homeOf(p)}</td>
+        <td><input class="count-in" inputmode="numeric" data-count="${p.id}" data-loc="rumah" aria-label="Hitungan fisik rumah ${esc(p.category + ' ' + p.name)}"></td>
         <td class="num" data-diff="${p.id}"></td>
       </tr>`).join('')}</tbody>`;
     $('opnameSum').textContent = '';
     $('opnameForm').hidden = false;
     $('opnameTable').querySelector('input')?.focus();
   }
+  // Per produk: { product_id, toko?, rumah? } — kolom yang dikosongkan tidak diubah
   function opnameEntries() {
-    return [...$('opnameTable').querySelectorAll('[data-count]')]
-      .filter(i => i.value.trim() !== '')
-      .map(i => ({ product_id: Number(i.dataset.count), counted: toInt(i.value) }));
+    const m = new Map();
+    $('opnameTable').querySelectorAll('[data-count]').forEach(i => {
+      if (i.value.trim() === '') return;
+      const id = Number(i.dataset.count), e = m.get(id) || m.set(id, { product_id: id }).get(id);
+      e[i.dataset.loc] = toInt(i.value);
+    });
+    return [...m.values()];
   }
+  const opnameTotal = e => { const p = byId(e.product_id); return (e.toko ?? tokoOf(p)) + (e.rumah ?? homeOf(p)); };
+  const opnameDiffers = e => { const p = byId(e.product_id); return opnameTotal(e) !== p.stock || (e.rumah ?? homeOf(p)) !== homeOf(p); };
   $('opnameTable').addEventListener('input', e => {
     const inp = e.target.closest('[data-count]'); if (!inp) return;
     const id = Number(inp.dataset.count), cell = $('opnameTable').querySelector(`[data-diff="${id}"]`);
-    const d = inp.value.trim() === '' ? null : toInt(inp.value) - byId(id).stock;
-    cell.innerHTML = d == null ? '' : d === 0 ? '<span class="chip ok">Cocok</span>' : `<span class="${d > 0 ? 'in' : 'out'}">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>`;
-    const entries = opnameEntries(), diff = entries.filter(x => x.counted !== byId(x.product_id).stock).length;
+    const en = opnameEntries().find(x => x.product_id === id);
+    const d = en ? opnameTotal(en) - byId(id).stock : null;
+    cell.innerHTML = d == null ? '' : d === 0 ? `<span class="chip ok">${opnameDiffers(en) ? 'Total cocok' : 'Cocok'}</span>` : `<span class="${d > 0 ? 'in' : 'out'}">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>`;
+    const entries = opnameEntries(), diff = entries.filter(opnameDiffers).length;
     $('opnameSum').textContent = entries.length ? `${entries.length} produk dihitung · ${diff} berbeda dari sistem` : '';
   });
   $('opnameTable').addEventListener('keydown', e => {   // Enter pindah ke produk berikutnya
     if (e.key !== 'Enter' || !e.target.matches('[data-count]')) return;
     e.preventDefault();
-    const all = [...$('opnameTable').querySelectorAll('[data-count]')];
+    const all = [...$('opnameTable').querySelectorAll('[data-count]')];   // toko, rumah, produk berikutnya
     all[all.indexOf(e.target) + 1]?.focus();
   });
   $('opnameBtn').addEventListener('click', openOpname);
@@ -906,11 +945,12 @@
     if (cardProduct !== p || cardRange[0] !== from) return;   // sudah ganti produk/periode
 
     moves.sort((a, b) => new Date(a.at) - new Date(b.at));
-    const current = byId(p.id)?.stock ?? p.stock;
+    const cur = byId(p.id) || p, current = cur.stock;
     const opening = current - moves.reduce((s, m) => s + m.delta, 0);
+    const openHome = homeOf(cur) - moves.reduce((s, m) => s + (m.home || 0), 0);
     const rows = moves.filter(m => new Date(m.at) < to);
-    let bal = opening;
-    rows.forEach(m => (m.balance = bal += m.delta));
+    let bal = opening, balHome = openHome;
+    rows.forEach(m => { m.balance = bal += m.delta; m.home_bal = balHome += (m.home || 0); });
     const inQty = rows.reduce((s, m) => s + Math.max(m.delta, 0), 0);
     const outQty = rows.reduce((s, m) => s - Math.min(m.delta, 0), 0);
 
@@ -918,15 +958,15 @@
       <div class="metric"><small>Stok awal</small><b>${opening}</b><span>${esc(dmy(from))}</span></div>
       <div class="metric"><small>Masuk</small><b class="in">+${inQty}</b></div>
       <div class="metric"><small>Keluar</small><b class="out">−${outQty}</b></div>
-      <div class="metric lead"><small>Stok akhir</small><b>${bal}</b><span>${esc(dmy(new Date(+to - 864e5)))}</span></div>`;
+      <div class="metric lead"><small>Stok akhir</small><b>${bal}</b><span>${esc(dmy(new Date(+to - 864e5)))} · toko ${bal - balHome} · rumah ${balHome}</span></div>`;
 
     const desc = m => m.order
       ? `${m.cancel ? 'Batal, stok kembali' : 'Terjual'} · Nota ${notaNo(m.order)}${m.order.customer_name ? ' · ' + esc(m.order.customer_name) : ''}`
       : esc(m.note || (m.delta > 0 ? 'Tambah stok' : 'Koreksi stok'));
     $('cardTable').innerHTML = `
-      <thead><tr><th>Tanggal</th><th>Keterangan</th><th class="num">Masuk</th><th class="num">Keluar</th><th class="num">Saldo</th><th>Oleh</th></tr></thead>
+      <thead><tr><th>Tanggal</th><th>Keterangan</th><th class="num">Masuk</th><th class="num">Keluar</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Oleh</th></tr></thead>
       <tbody>
-        <tr class="dim"><td>${esc(dmy(from))}</td><td>Stok awal</td><td></td><td></td><td class="num">${opening}</td><td></td></tr>
+        <tr class="dim"><td>${esc(dmy(from))}</td><td>Stok awal</td><td></td><td></td><td class="num">${opening - openHome}</td><td class="num">${openHome}</td><td class="num">${opening}</td><td></td></tr>
         ${rows.map(m => {
           const d = new Date(m.at);
           return `<tr>
@@ -934,10 +974,12 @@
             <td>${desc(m)}</td>
             <td class="num in">${m.delta > 0 ? m.delta : ''}</td>
             <td class="num out">${m.delta < 0 ? -m.delta : ''}</td>
+            <td class="num">${m.balance - m.home_bal}</td>
+            <td class="num">${m.home_bal}</td>
             <td class="num"><b>${m.balance}</b></td>
             <td class="muted">${esc((m.by || '').split('@')[0])}</td>
           </tr>`;
-        }).join('') || '<tr><td class="empty" colspan="6">Tidak ada mutasi stok di periode ini.</td></tr>'}
+        }).join('') || '<tr><td class="empty" colspan="8">Tidak ada mutasi stok di periode ini.</td></tr>'}
       </tbody>`;
   }
 
@@ -1132,7 +1174,7 @@
       <tbody>${productions.length ? productions.map(p => `<tr>
         <td data-sort="${p.day}">${dmy(parseYmd(p.day))}</td>
         <td>${esc((p.purchases || []).map(b => `${b.carry ? 'sisa ' : ''}${b.item} ${dec(b.qty)} ${b.unit}${Number(b.leftover) ? ` (sisa ${dec(b.leftover)})` : ''}`).join(', ')) || '—'}</td>
-        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}${p.stocked && p.outputs?.length ? ' <span class="chip ok">masuk stok</span>' : ''}</td>
+        <td>${esc((p.outputs || []).map(o => `${o.name} ${o.qty}`).join(', ')) || '—'}${p.stocked && p.outputs?.length ? ` <span class="chip ok">masuk stok ${p.location === 'rumah' ? 'rumah' : 'toko'}</span>` : ''}</td>
         <td class="num">${rp(Math.round((p.purchases || []).reduce((s, b) => s + usedOf(b), 0)))}</td>
         <td>${esc(p.note || '')}</td>
         <td><div class="add-stock"><button class="ghost small need-pembelian_catat" data-prodedit="${p.id}">Ubah</button>
@@ -1166,6 +1208,9 @@
       ],
     };
     const outQty = id => (e.outputs || []).find(o => o.product_id === id)?.qty ?? '';
+    // Lokasi hasil produksi: dari catatan yang diubah, atau pilihan terakhir di perangkat ini
+    let loc = entry?.location; if (!loc) { try { loc = localStorage.getItem('lunpiaProdLoc'); } catch {} }
+    loc = loc === 'rumah' ? 'rumah' : 'toko';
     // produk aktif + produk nonaktif yang sudah tercatat di entri ini
     const list = products.filter(p => p.active || (e.outputs || []).some(o => o.product_id === p.id));
     $('prodForm').dataset.id = entry?.id || '';
@@ -1181,8 +1226,14 @@
       <h4>Hasil produksi (pcs)</h4>
       <div class="out-grid">${list.map(p => `<label>${esc(prodName(p))}
         <input data-out="${p.id}" inputmode="numeric" value="${outQty(p.id)}" placeholder="0"></label>`).join('')}</div>
-      <label class="check"><input type="checkbox" data-f="stocked"${e.stocked !== false ? ' checked' : ''}>
-        Tambahkan hasil produksi ke stok <span class="muted">(tercatat di kartu stok)</span></label>
+      <div class="prod-stock">
+        <label class="check"><input type="checkbox" data-f="stocked"${e.stocked !== false ? ' checked' : ''}>
+          Tambahkan hasil produksi ke stok <span class="muted">(tercatat di kartu stok)</span></label>
+        <label class="prod-loc">disimpan di
+          <select data-f="location" aria-label="Lokasi hasil produksi">
+            <option value="toko"${loc === 'toko' ? ' selected' : ''}>Toko</option><option value="rumah"${loc === 'rumah' ? ' selected' : ''}>Rumah</option>
+          </select></label>
+      </div>
       <label>Catatan <input data-f="note" value="${esc(e.note || '')}" placeholder="opsional"></label>
       <p>Belanja <b data-sum="buy"></b> · bahan terpakai <b data-sum="used"></b> · hasil <b data-sum="pcs"></b></p>
       <div class="actions"><button type="button" class="primary small" data-prodsave>Simpan</button>
@@ -1207,7 +1258,7 @@
       return { product_id: p.id, name: prodName(p), qty: toInt(i.value) };
     }).filter(o => o.qty > 0);
     return { day: box.querySelector('[data-f="day"]').value, note: box.querySelector('[data-f="note"]').value.trim(),
-      stocked: box.querySelector('[data-f="stocked"]').checked, purchases, outputs };
+      stocked: box.querySelector('[data-f="stocked"]').checked, location: box.querySelector('[data-f="location"]').value, purchases, outputs };
   }
   function prodCalc() {
     const { purchases, outputs } = readProdForm(), q = k => $('prodForm').querySelector(`[data-sum="${k}"]`);
@@ -1228,6 +1279,7 @@
     if ('prodcancel' in d) { $('prodForm').hidden = true; $('prodForm').innerHTML = ''; return; }
     if (!('prodsave' in d)) return;
     const x = readProdForm();
+    try { localStorage.setItem('lunpiaProdLoc', x.location); } catch {}
     if (!x.day) return toast('Isi tanggal', true);
     if (!x.purchases.length && !x.outputs.length) return toast('Isi pembelian bahan atau hasil produksi', true);
     const bad = x.purchases.find(p => !p.carry && (!p.item || !p.qty || !p.price));
@@ -1797,7 +1849,7 @@
     ['pembelian', 'Tab Produksi', 'Lihat pembelian bahan, hasil produksi & sisa bahan',
       { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan' }],
     ['stok', 'Tab Stok', 'Lihat stok & kartu stok',
-      { stok_masuk: 'Tambah stok masuk', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
+      { stok_masuk: 'Tambah stok masuk', stok_pindah: 'Pindah stok toko ↔ rumah', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
         produk_tambah: 'Tambah produk baru', produk_ubah: 'Ubah produk, harga & sembunyikan produk' }],
     ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
       { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
@@ -1808,14 +1860,14 @@
   const PERM_PRESETS = {
     kasir: { label: 'Kasir biasa', desc: 'Melayani pembeli, buka & tutup kas. Tidak bisa batal/ubah/hapus nota, kurangi stok, atau melihat omzet.',
       reason: true, cashmax: 100000,
-      perms: { pesanan: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, stok: 1, kontak: 1 } },
+      perms: { pesanan: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, stok: 1, stok_pindah: 1, kontak: 1 } },
     kepala: { label: 'Kepala toko', desc: 'Seperti kasir, ditambah batal & ubah nota, stok masuk & opname, produksi, laporan, ubah kontak.',
       reason: true, cashmax: 0,
       perms: { pesanan: 1, batal: 1, ubah_nota: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, pembelian: 1, pembelian_catat: 1,
-               stok: 1, stok_masuk: 1, opname: 1, laporan: 1, kontak: 1, kontak_ubah: 1 } },
+               stok: 1, stok_masuk: 1, stok_pindah: 1, opname: 1, laporan: 1, kontak: 1, kontak_ubah: 1 } },
     produksi: { label: 'Bagian produksi', desc: 'Hanya mencatat pembelian bahan & hasil produksi, dan melihat stok.',
       reason: true, cashmax: 0,
-      perms: { pembelian: 1, pembelian_catat: 1, stok: 1 } },
+      perms: { pembelian: 1, pembelian_catat: 1, stok: 1, stok_pindah: 1 } },
   };
   const permRaw = (st, k) => typeof st.perms?.[k] === 'boolean' ? st.perms[k] : DB.permDefaults[k];
   const permOf = (st, k) => permRaw(st, k) && permRaw(st, DB.permParent[k] || k);
