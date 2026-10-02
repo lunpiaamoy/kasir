@@ -29,7 +29,8 @@
   };
   function fail(error) {
     if (!error) return;
-    if (NOT_UPDATED.includes(error.code)) throw new Error(UPDATE_MSG);
+    // Sertakan apa yang belum ada (nama fungsi/tabel/kolom) supaya tahu file SQL mana yang perlu dijalankan
+    if (NOT_UPDATED.includes(error.code)) throw new Error(`${UPDATE_MSG} (Yang belum ada: ${String(error.message || error.code).slice(0, 160)})`);
     if (error.code === '42501') throw new Error(DENIED_MSG);
     if (/Failed to fetch|NetworkError|Load failed|network/i.test(error.message || ''))
       throw new Error('Tidak tersambung ke server (offline). Periksa internet, lalu coba lagi.');
