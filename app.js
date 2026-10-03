@@ -1058,11 +1058,10 @@
 
     const nPay = m => valid.filter(o => o.pay_method === m).length;
     $('metrics').innerHTML = `
-      <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b><span>${valid.length} transaksi</span></div>
+      <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b>
+        <span class="sale-split"><span>Transaksi (${valid.length})</span><span>Tunai Rp ${rp(cash)} (${nPay('tunai')})</span><span>QRIS Rp ${rp(qris)} (${nPay('qris')})</span></span></div>
       <div class="metric lead need-laba" id="profitMetric"></div>
       <div class="mini-stats">
-        <span><small>Tunai</small> Rp ${rp(cash)} <i>${nPay('tunai')}×</i></span>
-        <span><small>QRIS</small> Rp ${rp(qris)} <i>${nPay('qris')}×</i></span>
         <span title="Di luar penjualan"><small>Ongkir</small> Rp ${rp(ongkir)}</span>
         ${canceled ? `<span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span>` : ''}
       </div>`;
