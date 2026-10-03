@@ -754,6 +754,15 @@
 
   // ---------------------------------------------------------------- Stock
   let editingId = null;
+  // Ikon garis (SVG) untuk tombol stok
+  const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    plus:  svg('<path d="M12 5v14M5 12h14"/>'),
+    minus: svg('<path d="M5 12h14"/>'),
+    move:  svg('<path d="M7 7h12l-3-3M17 17H5l3 3"/>'),
+    card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
+    edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
+  };
   function renderStock() {
     const low = products.filter(p => p.active && p.stock <= p.min_stock);
     const tokoEmpty = products.filter(p => p.active && tokoOf(p) <= 0 && homeOf(p) > 0);
@@ -763,68 +772,74 @@
       ? `<br><b class="warn-text">Toko kosong, ada di rumah:</b> ${tokoEmpty.map(p => esc(`${p.category} ${p.name} (${homeOf(p)})`)).join(', ')}.` : '');
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
     $('stockTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort>Tambah / kurangi stok</th><th></th></tr></thead>
+      <thead><tr><th>Produk</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
         <tr class="${p.active ? '' : 'dim'}">
-          <td>${esc(p.category)}</td>
-          <td><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
-          <td class="num">${rp(p.price)}</td>
+          <td data-sort="${esc(p.category + ' ' + p.name)}"><span class="muted cat">${esc(p.category)}</span><br><b>${esc(p.name)}</b>${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</td>
           <td class="num stock-num${tokoOf(p) <= 0 ? ' out' : ''}">${tokoOf(p)}</td>
           <td class="num stock-num">${homeOf(p)}</td>
           <td class="num stock-num total">${p.stock}</td>
-          <td data-sort="${p.stock - p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'} <span class="muted">min ${p.min_stock}</span></td>
-          <td><div class="add-stock stock-adj need-stok_ubah">
-            <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Jumlah stok ${esc(p.name)}">
-            <select id="loc-${p.id}" aria-label="Lokasi"><option value="toko">di Toko</option><option value="rumah">di Rumah</option></select>
-            <button class="stock-btn plus need-stok_masuk" data-addstock="${p.id}" data-sign="1" title="Tambah stok" aria-label="Tambah stok ${esc(p.name)}">+</button>
-            <button class="stock-btn minus need-stok_kurang" data-addstock="${p.id}" data-sign="-1" title="Kurangi stok" aria-label="Kurangi stok ${esc(p.name)}">−</button>
+          <td data-sort="${p.stock - p.min_stock}" title="Batas minimum ${p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'}</td>
+          <td><div class="stock-actions">
+            <button class="stock-btn plus need-stok_masuk" data-act="plus" data-id="${p.id}" title="Tambah stok" aria-label="Tambah stok ${esc(p.name)}">${ICON.plus}</button>
+            <button class="stock-btn minus need-stok_kurang" data-act="minus" data-id="${p.id}" title="Kurangi stok" aria-label="Kurangi stok ${esc(p.name)}">${ICON.minus}</button>
+            <button class="stock-btn move need-stok_pindah" data-act="move" data-id="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)}">${ICON.move}</button>
+            <button class="stock-btn plain" data-card="${p.id}" title="Kartu stok (riwayat)" aria-label="Kartu stok ${esc(p.name)}">${ICON.card}</button>
+            <button class="stock-btn plain need-produk_ubah" data-edit="${p.id}" title="Ubah produk" aria-label="Ubah ${esc(p.name)}">${ICON.edit}</button>
           </div></td>
-          <td><div class="add-stock">
-            <button class="stock-btn move need-stok_pindah" data-move="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)} toko ↔ rumah">⇄</button>
-            <button class="ghost small" data-card="${p.id}">Kartu stok</button>
-            <button class="ghost small need-produk_ubah" data-edit="${p.id}">Ubah</button>
-          </div></td>
-        </tr>`).join('') : '<tr><td class="empty" colspan="9">Belum ada produk.</td></tr>'}</tbody>`;
+        </tr>`).join('') : '<tr><td class="empty" colspan="6">Belum ada produk.</td></tr>'}</tbody>`;
+  }
+
+  // Baris isian di bawah produk: + tambah, − kurangi, ⇄ pindah
+  const ACT = {
+    plus:  { title: 'Tambah stok', btn: 'Tambah' },
+    minus: { title: 'Kurangi stok', btn: 'Kurangi' },
+    move:  { title: 'Pindah', btn: 'Pindahkan' },
+  };
+  function openStockAction(kind, p, btn) {
+    const open = $('stockTable').querySelector('.move-row');
+    open?.remove();
+    if (open && open.dataset.id == p.id && open.dataset.kind === kind) return;   // klik lagi = tutup
+    const where = kind === 'move'
+      ? `<select data-mv="to" aria-label="Arah"><option value="toko"${homeOf(p) ? ' selected' : ''}>Rumah → Toko</option><option value="rumah"${homeOf(p) ? '' : ' selected'}>Toko → Rumah</option></select>`
+      : `<select data-mv="loc" aria-label="Lokasi"><option value="toko">di Toko</option><option value="rumah">di Rumah</option></select>`;
+    btn.closest('tr').insertAdjacentHTML('afterend', `<tr class="move-row" data-id="${p.id}" data-kind="${kind}"><td colspan="6"><div class="move-stock ${kind}">
+      <b>${ACT[kind].title} ${esc(p.category)} ${esc(p.name)}</b>
+      <span class="muted">Toko ${tokoOf(p)} · Rumah ${homeOf(p)}</span>
+      <input inputmode="numeric" data-mv="qty" placeholder="Jumlah" aria-label="Jumlah">
+      ${where}
+      <button class="primary small" data-movesave>${ACT[kind].btn}</button><button class="ghost small" data-movecancel>Batal</button>
+    </div></td></tr>`);
+    btn.closest('tr').nextElementSibling.querySelector('input').focus();
   }
 
   $('stockTable').addEventListener('click', async e => {
     const t = e.target.closest('button'); if (!t) return;
-    if (t.dataset.addstock) {
-      const id = Number(t.dataset.addstock);
-      const raw = $('add-' + id).value.trim();
-      const n = (t.dataset.sign === '-1' || raw.startsWith('-') ? -1 : 1) * toInt(raw);
-      if (!n) return toast(`Isi jumlah stok yang mau ${t.dataset.sign === '-1' ? 'dikurangi' : 'ditambahkan'}`, true);
-      if (n < 0 && !can('stok_kurang')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
-      if (n > 0 && !can('stok_masuk')) return toast('Akun ini tidak punya wewenang menambah stok', true);
-      const loc = $('loc-' + id).value;
-      try { await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok', loc); toast(`Stok ${byId(id).name} di ${loc} ${n > 0 ? '+' : ''}${n}`); loadProducts(); }
-      catch (err) { toast(err.message, true); }
-    }
-    // Pindah stok rumah ↔ toko
-    if (t.dataset.move) {
-      $('stockTable').querySelector('.move-row')?.remove();
-      const p = byId(Number(t.dataset.move));
-      t.closest('tr').insertAdjacentHTML('afterend', `<tr class="move-row" data-id="${p.id}"><td colspan="9"><div class="move-stock">
-        <b>Pindah ${esc(p.category)} ${esc(p.name)}</b>
-        <span class="muted">Toko ${tokoOf(p)} · Rumah ${homeOf(p)}</span>
-        <input inputmode="numeric" data-mv="qty" placeholder="Jumlah" aria-label="Jumlah dipindah">
-        <select data-mv="to" aria-label="Arah"><option value="toko"${homeOf(p) ? ' selected' : ''}>Rumah → Toko</option><option value="rumah"${homeOf(p) ? '' : ' selected'}>Toko → Rumah</option></select>
-        <button class="primary small" data-movesave>Pindahkan</button><button class="ghost small" data-movecancel>Batal</button>
-      </div></td></tr>`);
-      t.closest('tr').nextElementSibling.querySelector('input').focus();
-    }
+    if (t.dataset.act) openStockAction(t.dataset.act, byId(Number(t.dataset.id)), t);
     if ('movecancel' in t.dataset) t.closest('tr').remove();
     if ('movesave' in t.dataset) {
-      const row = t.closest('tr'), id = Number(row.dataset.id), qty = toInt(row.querySelector('[data-mv="qty"]').value), to = row.querySelector('[data-mv="to"]').value;
-      if (!qty) return toast('Isi jumlah yang dipindah', true);
-      try { await DB.moveStock(id, qty, to); toast(`${qty} ${byId(id).name} dipindah ke ${to}`); loadProducts(); }
-      catch (err) { toast(err.message, true); }
+      const row = t.closest('tr'), id = Number(row.dataset.id), kind = row.dataset.kind;
+      const qty = toInt(row.querySelector('[data-mv="qty"]').value);
+      if (!qty) return toast('Isi jumlahnya dulu', true);
+      t.disabled = true;
+      try {
+        if (kind === 'move') {
+          const to = row.querySelector('[data-mv="to"]').value;
+          await DB.moveStock(id, qty, to); toast(`${qty} ${byId(id).name} dipindah ke ${to}`);
+        } else {
+          const n = kind === 'minus' ? -qty : qty, loc = row.querySelector('[data-mv="loc"]').value;
+          await DB.addStock(id, n, n > 0 ? 'Tambah stok' : 'Koreksi stok', loc);
+          toast(`Stok ${byId(id).name} di ${loc} ${n > 0 ? '+' : ''}${n}`);
+        }
+        loadProducts();
+      } catch (err) { toast(err.message, true); t.disabled = false; }
     }
     if (t.dataset.edit) openProductForm(byId(Number(t.dataset.edit)));
     if (t.dataset.card) openStockCard(byId(Number(t.dataset.card)));
   });
   $('stockTable').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.id?.startsWith('add-')) e.target.nextElementSibling.click();
+    if (e.key === 'Enter' && e.target.dataset?.mv === 'qty') e.target.closest('tr').querySelector('[data-movesave]').click();
+    if (e.key === 'Escape' && e.target.closest('.move-row')) e.target.closest('.move-row').remove();
   });
 
   // ---------------------------------------------------------------- Stock opname (pemilik)
