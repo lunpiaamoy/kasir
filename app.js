@@ -608,7 +608,7 @@
 
     const statusChip = s => s === 'batal' ? '<span class="chip bad">Batal</span>' : s === 'menunggu' ? '<span class="chip warn">Menunggu</span>' : '<span class="chip ok">Selesai</span>';
     $('recentTable').innerHTML = `
-      <thead><tr><th>Nota</th><th>Tanggal</th><th>Waktu</th><th>Pembeli</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nota</th><th>Tanggal</th><th>Waktu</th><th>Pembeli</th><th>Jenis</th><th>Bayar</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
       <tbody>${recent.length ? recent.map(o => {
         const d = new Date(o.created_at);
         return `<tr class="${o.status === 'batal' ? 'dim' : ''}">
@@ -616,6 +616,8 @@
           <td data-sort="${esc(o.created_at)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
           <td data-sort="${pad(d.getHours())}${pad(d.getMinutes())}">${pad(d.getHours())}.${pad(d.getMinutes())}</td>
           <td>${esc(o.customer_name || '-')}</td>
+          <td>${FUL_LABEL[o.fulfillment]}</td>
+          <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
           <td class="num">${rp(o.total)}</td>
           <td>${statusChip(o.status)}${o.cancel_reason ? `<div class="muted cancel-reason">${esc(o.cancel_reason)}</div>` : ''}</td>
           <td><div class="add-stock" data-actions>
@@ -624,7 +626,7 @@
             <button class="ghost small danger need-hapus_nota" data-del="${o.id}">Hapus</button>
           </div></td>
         </tr>`;
-      }).join('') : '<tr><td class="empty" colspan="7">Belum ada transaksi.</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td class="empty" colspan="9">Belum ada transaksi.</td></tr>'}</tbody>`;
   }
 
   $('view-pesanan').addEventListener('click', async e => {
