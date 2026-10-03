@@ -286,8 +286,13 @@
       // Ubah / hapus kas di riwayat (pemilik; hapus butuh 004_ubah_hapus_kas_kontak.sql)
       async updateCashDay(day, f) {
         const { data, error } = await sb.from('cash_days').update(f).eq('day', day).select();
+        if (error?.code === '23505') throw new Error('Tanggal itu sudah punya catatan kas. Hapus atau ubah catatan tanggal itu dulu.');
         fail(error);
         if (!data.length) throw new Error('Kas tidak bisa diubah. Hanya pemilik yang bisa mengubah kas yang sudah ditutup.');
+      },
+      // Tanggal kas diganti: kas keluar hari itu ikut pindah
+      async moveCashOut(fromDay, toDay) {
+        const { error } = await sb.from('cash_out').update({ day: toDay }).eq('day', fromDay); fail(error);
       },
       async deleteCashDay(day) {
         const { data, error } = await sb.from('cash_days').delete().eq('day', day).select();
@@ -565,7 +570,15 @@
         db.cash[day] = { ...(db.cash[day] || { day, opened_by: 'contoh@lunpia.local', opened_at: new Date().toISOString() }), opening, opening_detail };
         save();
       },
-      async updateCashDay(day, f) { const c = load().cash?.[day]; if (c) { Object.assign(c, f); save(); } },
+      async updateCashDay(day, f) {
+        const db = load(), c = db.cash?.[day]; if (!c) return;
+        if (f.day && f.day !== day) {
+          if (db.cash[f.day]) throw new Error('Tanggal itu sudah punya catatan kas. Hapus atau ubah catatan tanggal itu dulu.');
+          delete db.cash[day]; db.cash[f.day] = c;
+        }
+        Object.assign(c, f); save();
+      },
+      async moveCashOut(fromDay, toDay) { const db = load(); (db.cashOut || []).forEach(x => { if (x.day === fromDay) x.day = toDay; }); save(); },
       async listCashOut(day) { return clone((load().cashOut || []).filter(x => x.day === day)); },
       async listCashOutFrom(fromDay) { return clone((load().cashOut || []).filter(x => x.day >= fromDay)); },
       async listStaff() { return clone(load().staff ||= [{ email: 'contoh@lunpia.local', name: 'Contoh', role: 'pemilik' }]); },
