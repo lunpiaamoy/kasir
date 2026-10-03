@@ -783,3 +783,12 @@ label { color: #5a4a46; }
   #stockTable.cards .stock-btn { flex: 1; max-width: 64px; }
 }
 .note-field { margin: 4px 0 12px; }
+/* Pecahan uang: berjajar ke samping, turun ke bawah kalau layar penuh */
+.denoms { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; max-width: 980px; }
+.denom, .denom:is(*) { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 8px 6px;
+  border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.denom .d-face { text-align: center; }
+.denom .d-x { display: none; }
+.denom input { width: 100%; }
+.denom .d-sub { text-align: center; font-size: 12px; min-height: 16px; }
+@media (max-width: 820px) { .denoms { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } }
