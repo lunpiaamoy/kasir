@@ -6,6 +6,19 @@
   // ---------------------------------------------------------------- Helpers
   const rp = n => (Number(n) || 0).toLocaleString('id-ID');
   const toInt = s => Number(String(s ?? '').replace(/[^\d]/g, '')) || 0;
+  // Ikon garis (SVG) untuk tombol aksi
+  const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    plus:  svg('<path d="M12 5v14M5 12h14"/>'),
+    minus: svg('<path d="M5 12h14"/>'),
+    move:  svg('<path d="M7 7h12l-3-3M17 17H5l3 3"/>'),
+    card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
+    edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
+    print: svg('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v6H7z"/>'),
+    trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+    order: svg('<path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2M12 11.5v5M9.5 14h5"/>'),
+  };
+  const iconBtn = (kind, cls, attrs, label) => `<button class="stock-btn ${cls}" ${attrs} title="${label}" aria-label="${label}">${ICON[kind]}</button>`;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pad = (n, w = 2) => String(n).padStart(w, '0');
   const notaNo = o => `(${o.year}) ${pad(o.seq, 5)}`;
@@ -595,10 +608,12 @@
               <div class="actions" data-actions>
                 <button class="primary small" data-done="${o.id}">Tandai selesai</button>
                 ${o.customer_wa ? waTextLink(o.customer_wa, reminderText(o), 'ghost small btn-link', 'Ingatkan via WA') : ''}
-                <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
                 <button class="ghost small danger need-batal" data-cancel="${o.id}">Batalkan</button>
-                <button class="ghost small need-ubah_nota" data-editorder="${o.id}">Ubah</button>
-                <button class="ghost small danger need-hapus_nota" data-del="${o.id}">Hapus</button>
+                <span class="icon-acts">
+                  ${iconBtn('print', 'plain', `data-reprint="${o.id}"`, 'Cetak ulang')}
+                  ${iconBtn('edit', 'plain need-ubah_nota', `data-editorder="${o.id}"`, 'Ubah')}
+                  ${iconBtn('trash', 'danger need-hapus_nota', `data-del="${o.id}"`, 'Hapus')}
+                </span>
               </div>
             </article>`;
           }).join('')}</div>
@@ -621,9 +636,9 @@
           <td class="num">${rp(o.total)}</td>
           <td>${statusChip(o.status)}${o.cancel_reason ? `<div class="muted cancel-reason">${esc(o.cancel_reason)}</div>` : ''}</td>
           <td><div class="add-stock" data-actions>
-            <button class="ghost small" data-reprint="${o.id}">Cetak ulang</button>
-            ${o.status === 'batal' ? '' : `<button class="ghost small need-ubah_nota" data-editorder="${o.id}">Ubah</button>`}
-            <button class="ghost small danger need-hapus_nota" data-del="${o.id}">Hapus</button>
+            ${iconBtn('print', 'plain', `data-reprint="${o.id}"`, 'Cetak ulang')}
+            ${o.status === 'batal' ? '' : iconBtn('edit', 'plain need-ubah_nota', `data-editorder="${o.id}"`, 'Ubah')}
+            ${iconBtn('trash', 'danger need-hapus_nota', `data-del="${o.id}"`, 'Hapus')}
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="9">Belum ada transaksi.</td></tr>'}</tbody>`;
@@ -697,10 +712,10 @@
           <td class="num">${rp(c.spent)}</td>
           <td data-sort="${esc(c.last)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
           <td><div class="add-stock">
-            <button class="primary small" data-neworder="${i}">Pesan baru</button>
+            ${iconBtn('order', 'main', `data-neworder="${i}"`, 'Pesan baru')}
             ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
-            <button class="ghost small need-kontak_ubah" data-contactedit="${i}">Ubah</button>
-            <button class="ghost small danger need-kontak_hapus" data-contactdel="${i}">Hapus</button>
+            ${iconBtn('edit', 'plain need-kontak_ubah', `data-contactedit="${i}"`, 'Ubah kontak')}
+            ${iconBtn('trash', 'danger need-kontak_hapus', `data-contactdel="${i}"`, 'Hapus kontak')}
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
@@ -754,15 +769,7 @@
 
   // ---------------------------------------------------------------- Stock
   let editingId = null;
-  // Ikon garis (SVG) untuk tombol stok
-  const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  const ICON = {
-    plus:  svg('<path d="M12 5v14M5 12h14"/>'),
-    minus: svg('<path d="M5 12h14"/>'),
-    move:  svg('<path d="M7 7h12l-3-3M17 17H5l3 3"/>'),
-    card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
-    edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
-  };
+
   function renderStock() {
     const low = products.filter(p => p.active && p.stock <= p.min_stock);
     const tokoEmpty = products.filter(p => p.active && tokoOf(p) <= 0 && homeOf(p) > 0);
@@ -1371,7 +1378,7 @@
       <tbody>${c.out.map(x => { const t = new Date(x.created_at); return `<tr>
         <td>${pad(t.getHours())}.${pad(t.getMinutes())}</td><td>${esc(x.note || '-')}</td>
         <td class="num">${rp(x.amount)}</td><td class="muted">${esc((x.created_by || '').split('@')[0])}</td>
-        <td class="need-kas_hapus"><button class="ghost small danger" data-cashout-del="${x.id}">Hapus</button></td>
+        <td class="need-kas_hapus">${iconBtn('trash', 'danger', `data-cashout-del="${x.id}"`, 'Hapus kas keluar')}</td>
       </tr>`; }).join('')}</tbody></table></div>`;
   }
   function cashOutSection(c, closed) {
@@ -1551,8 +1558,8 @@
           <td class="muted">${who(c.closed_by)}</td>
           <td class="muted">${esc(c.note || '')}</td>
           <td class="need-kas_ubah_hapus"><div class="add-stock">
-            <button class="ghost small need-kas_ubah" data-cashedit="${esc(c.day)}">Ubah</button>
-            <button class="ghost small danger need-kas_hapus" data-cashdel="${esc(c.day)}">Hapus</button>
+            ${iconBtn('edit', 'plain need-kas_ubah', `data-cashedit="${esc(c.day)}"`, 'Ubah kas')}
+            ${iconBtn('trash', 'danger need-kas_hapus', `data-cashdel="${esc(c.day)}"`, 'Hapus kas')}
           </div></td>
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="8">Belum ada catatan kas.</td></tr>'}</tbody>`;

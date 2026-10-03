@@ -810,3 +810,12 @@ label { color: #5a4a46; }
 .stock-btn:focus-visible { outline: 2px solid var(--amoy); outline-offset: 2px; }
 .stock-actions { gap: 6px; }
 .stock-actions .stock-btn.move { margin-right: 6px; }
+
+/* Tombol ikon lain: hapus (merah), pesan baru (maroon) */
+.stock-btn svg { pointer-events: none; }
+.stock-btn.danger { color: #c0392b; background: #fff; border-color: #f3cfcb; }
+.stock-btn.danger:hover { background: #fdecea; }
+.stock-btn.main { color: #fff; background: linear-gradient(135deg, #9b2226, #6d1416); border-color: #7a181b; }
+.stock-btn.main:hover { filter: brightness(1.08); }
+.icon-acts { display: inline-flex; gap: 6px; align-items: center; }
+.add-stock:has(.stock-btn) { gap: 6px; flex-wrap: nowrap; }
