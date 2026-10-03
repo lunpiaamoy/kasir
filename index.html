@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=47">
+<link rel="stylesheet" href="style.css?v=48">
 </head>
 <body>
 
@@ -87,8 +87,6 @@
             <div><label for="custName">Nama</label><input id="custName" autocomplete="off"></div>
             <div><label for="custWa">WA</label><input id="custWa" inputmode="tel" autocomplete="off"></div>
           </div>
-          <label for="orderNote">Catatan</label>
-          <input id="orderNote" autocomplete="off" maxlength="200" placeholder="mis. digoreng kering, tanpa sambal">
         </fieldset>
 
         <fieldset class="field-group">
@@ -123,6 +121,11 @@
             <div class="change"><span>Kembalian</span><b id="changeOut">0</b></div>
           </div>
         </fieldset>
+
+        <div class="note-field">
+          <label for="orderNote">Catatan</label>
+          <input id="orderNote" autocomplete="off" maxlength="200" placeholder="mis. digoreng kering, tanpa sambal">
+        </div>
 
         <button class="primary big" id="saveBtn">Simpan &amp; cetak struk</button>
         <p class="error" id="cartError" role="alert"></p>
@@ -382,9 +385,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=47"></script>
-<script src="db.js?v=47"></script>
-<script src="app.js?v=47"></script>
+<script src="config.js?v=48"></script>
+<script src="db.js?v=48"></script>
+<script src="app.js?v=48"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

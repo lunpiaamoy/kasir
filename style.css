@@ -782,3 +782,4 @@ label { color: #5a4a46; }
   #stockTable.cards td:nth-child(6) .stock-actions { justify-content: space-between; flex-wrap: nowrap; }
   #stockTable.cards .stock-btn { flex: 1; max-width: 64px; }
 }
+.note-field { margin: 4px 0 12px; }
