@@ -38,7 +38,7 @@
 
   function segValue(seg) { return seg.querySelector('[aria-checked="true"]').dataset.val; }
   function setSeg(seg, val) {
-    seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range) === val)));
+    seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range ?? b.dataset.cv ?? b.dataset.days) === String(val))));
   }
 
   // ---------------------------------------------------------------- Sort tabel
