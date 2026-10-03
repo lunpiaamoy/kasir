@@ -1064,7 +1064,6 @@
         <span><small>Tunai</small> Rp ${rp(cash)} <i>${nPay('tunai')}×</i></span>
         <span><small>QRIS</small> Rp ${rp(qris)} <i>${nPay('qris')}×</i></span>
         <span title="Di luar penjualan"><small>Ongkir</small> Rp ${rp(ongkir)}</span>
-        <span class="need-laba" id="usedMetric" title="Dari catatan pembelian & produksi"></span>
         ${canceled ? `<span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span>` : ''}
       </div>`;
     // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama
@@ -1073,9 +1072,8 @@
       DB.materialUsed(f, t).then(used => {
         if (range[0] !== from) return;   // periode sudah diganti
         const profit = total - used;
-        $('usedMetric').innerHTML = `<small>Bahan terpakai</small> Rp ${rp(used)}`;
-        $('profitMetric').innerHTML = `<small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span>`;
-      }).catch(e => { $('profitMetric').innerHTML = `<small>Laba</small><span class="error">${esc(e.message)}</span>`; $('usedMetric').remove(); });
+        $('profitMetric').innerHTML = `<small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan − bahan terpakai Rp ${rp(used)}</span>`;
+      }).catch(e => { $('profitMetric').innerHTML = `<small>Laba</small><span class="error">${esc(e.message)}</span>`; });
     }
 
     const top = new Map();
