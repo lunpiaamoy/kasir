@@ -819,3 +819,14 @@ label { color: #5a4a46; }
 .stock-btn.main:hover { filter: brightness(1.08); }
 .icon-acts { display: inline-flex; gap: 6px; align-items: center; }
 .add-stock:has(.stock-btn) { gap: 6px; flex-wrap: nowrap; }
+
+/* Ubah riwayat kas langsung di barisnya */
+.cash-edit-row td { background: #fffaf3; vertical-align: middle; }
+.cash-edit-row input { width: 100%; min-width: 0; padding: 6px 8px; }
+.cash-edit-row td.num input { text-align: right; }
+.cash-edit-row input[type=date] { min-width: 130px; }
+@media (max-width: 820px) {
+  .table.cards tbody tr.cash-edit-row td { display: flex; justify-content: space-between; align-items: center; text-align: left; }
+  .table.cards tbody tr.cash-edit-row td[data-label=""] { justify-content: flex-end; }
+  .table.cards .cash-edit-row td input { flex: 0 0 62%; width: 62%; max-width: 62%; }
+}

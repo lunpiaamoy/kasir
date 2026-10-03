@@ -38,7 +38,7 @@
 
   function segValue(seg) { return seg.querySelector('[aria-checked="true"]').dataset.val; }
   function setSeg(seg, val) {
-    seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range) === val)));
+    seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-checked', String((b.dataset.val ?? b.dataset.range ?? b.dataset.cv ?? b.dataset.days) === String(val))));
   }
 
   // ---------------------------------------------------------------- Sort tabel
@@ -1574,25 +1574,41 @@
     try {
       if (d.cashedit) {
         const c = cashRows.get(d.cashedit), row = t.closest('tr');
-        row.innerHTML = `<td colspan="8"><div class="cash-edit">
-          <b>${esc(parseYmd(c.day).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</b>
-          <label>Uang awal<input inputmode="numeric" data-f="opening" value="${rp(c.opening)}"></label>
-          ${c.closed_at ? `<label>Uang dihitung<input inputmode="numeric" data-f="counted" value="${rp(c.counted)}"></label>` : ''}
-          <label class="grow">Catatan<input data-f="note" value="${esc(c.note || '')}" autocomplete="off"></label>
-          <div class="actions"><button class="primary small" data-cashsave="${esc(c.day)}">Simpan</button>
-          <button class="ghost small" data-cashcancel>Batal</button></div>
-        </div></td>`;
+        const num = v => v == null ? '' : rp(v);
+        const staff = await DB.listStaff().catch(() => []);
+        row.classList.add('cash-edit-row');
+        row.innerHTML = `
+          <td data-label="Tanggal"><input type="date" data-f="day" value="${esc(c.day)}" aria-label="Tanggal"></td>
+          <td data-label="Uang awal" class="num"><input inputmode="numeric" data-f="opening" value="${num(c.opening)}" aria-label="Uang awal"></td>
+          <td data-label="Seharusnya" class="num"><input inputmode="numeric" data-f="expected" value="${num(c.expected)}" placeholder="—" aria-label="Seharusnya"></td>
+          <td data-label="Dihitung" class="num"><input inputmode="numeric" data-f="counted" value="${num(c.counted)}" placeholder="—" aria-label="Dihitung"></td>
+          <td data-label="Selisih"><input inputmode="text" data-f="diff" value="${c.counted != null && c.expected != null ? (c.counted - c.expected < 0 ? '-' : '') + rp(Math.abs(c.counted - c.expected)) : ''}" placeholder="—" aria-label="Selisih (minus = kurang)"></td>
+          <td data-label="Ditutup oleh"><input data-f="closed_by" list="cashStaffList" value="${esc(c.closed_by || '')}" placeholder="email staf" autocomplete="off" aria-label="Ditutup oleh">
+            <datalist id="cashStaffList">${staff.map(x => `<option value="${esc(x.email)}">${esc(x.name || '')}</option>`).join('')}</datalist></td>
+          <td data-label="Catatan"><input data-f="note" value="${esc(c.note || '')}" autocomplete="off" aria-label="Catatan"></td>
+          <td data-label=""><div class="add-stock">
+            <button class="primary small" data-cashsave="${esc(c.day)}">Simpan</button>
+            <button class="ghost small" data-cashcancel>Batal</button></div></td>`;
         row.querySelector('input').focus();
       } else if (d.cashsave) {
-        const c = cashRows.get(d.cashsave), box = t.closest('.cash-edit');
-        const val = f => box.querySelector(`[data-f="${f}"]`)?.value;
-        const f = { opening: toInt(val('opening')), note: val('note').trim() };
+        const c = cashRows.get(d.cashsave), box = t.closest('tr');
+        const val = f => box.querySelector(`[data-f="${f}"]`).value.trim();
+        const opt = f => val(f) === '' ? null : toInt(val(f));
+        const f = { opening: toInt(val('opening')), expected: opt('expected'), counted: opt('counted'),
+                    closed_by: val('closed_by') || null, note: val('note') };
+        const day = val('day');
+        if (!day) return toast('Isi tanggal', true);
+        if (day !== c.day) f.day = day;
+        if (f.counted != null && f.expected == null) return toast('Isi "Seharusnya" kalau "Dihitung" diisi', true);
+        if (f.counted != null && !c.closed_at) f.closed_at = new Date().toISOString();   // jadi kas yang sudah ditutup
+        if (f.counted == null && f.expected == null && c.closed_at) Object.assign(f, { closed_at: null, closed_by: null });  // dikosongkan = belum ditutup
         if (f.opening !== c.opening) f.opening_detail = null;            // rincian lama tidak cocok lagi
-        if (c.closed_at) { f.counted = toInt(val('counted')); if (f.counted !== c.counted) f.counted_detail = null; }
+        if (f.counted !== c.counted) f.counted_detail = null;
         await DB.updateCashDay(c.day, f).catch(async err => {
           if (!/opening_detail|counted_detail|PGRST204/.test(err.message)) throw err;   // kolom rincian (003) belum ada
           delete f.opening_detail; delete f.counted_detail; await DB.updateCashDay(c.day, f);
         });
+        if (f.day) await DB.moveCashOut(c.day, f.day).catch(() => toast('Kas keluar tanggal lama tidak ikut pindah', true));
         toast('Kas diperbarui'); renderCash();
       } else if ('cashcancel' in d) renderCashHistory();
       else if (d.cashdel) {
@@ -1601,6 +1617,31 @@
         await DB.deleteCashDay(c.day); toast('Catatan kas dihapus'); renderCash(); refreshNotices();
       }
     } catch (err) { toast(err.message, true); }
+  });
+
+  // Ubah riwayat kas: uang awal geser "seharusnya", selisih ↔ dihitung saling menyesuaikan
+  $('cashHistory').addEventListener('input', e => {
+    const row = e.target.closest('.cash-edit-row'); if (!row) return;
+    const inp = f => row.querySelector(`[data-f="${f}"]`);
+    const signed = v => (String(v).trim().startsWith('-') ? -1 : 1) * toInt(v);
+    const fmt = n => (n < 0 ? '-' : '') + rp(Math.abs(n));
+    const f = e.target.dataset.f;
+    if (f === 'expected') inp('expected').dataset.touched = '1';
+    if (f === 'opening' && !inp('expected').dataset.touched && inp('expected').value !== '') {
+      const c = cashRows.get(row.querySelector('[data-cashsave]').dataset.cashsave);
+      if (c?.expected != null) inp('expected').value = rp(c.expected + toInt(inp('opening').value) - c.opening);
+    }
+    if (f === 'diff') {
+      if (inp('expected').value !== '' && inp('diff').value.trim() !== '' && inp('diff').value.trim() !== '-')
+        inp('counted').value = rp(toInt(inp('expected').value) + signed(inp('diff').value));
+    } else if (inp('expected').value !== '' && inp('counted').value !== '') {
+      inp('diff').value = fmt(toInt(inp('counted').value) - toInt(inp('expected').value));
+    }
+  });
+  $('cashHistory').addEventListener('keydown', e => {
+    const row = e.target.closest('.cash-edit-row'); if (!row) return;
+    if (e.key === 'Enter') row.querySelector('[data-cashsave]').click();
+    if (e.key === 'Escape') renderCashHistory();
   });
 
   $('cashPanel').addEventListener('click', async e => {
