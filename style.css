@@ -830,3 +830,12 @@ label { color: #5a4a46; }
   .table.cards tbody tr.cash-edit-row td[data-label=""] { justify-content: flex-end; }
   .table.cards .cash-edit-row td input { flex: 0 0 62%; width: 62%; max-width: 62%; }
 }
+
+/* Laporan: angka pendukung kecil di bawah kartu utama */
+.mini-stats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;
+  padding: 2px 4px; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink, #2b1d16); }
+.mini-stats > span { white-space: nowrap; }
+.mini-stats > span:empty { display: none; }
+.mini-stats small { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+.mini-stats i { font-style: normal; color: var(--muted); font-size: 12px; }
+#metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 760px; }
