@@ -1056,20 +1056,24 @@
     const ongkir = sum(valid, o => o.ongkir);
     const canceled = orders.length - valid.length;
 
+    const nPay = m => valid.filter(o => o.pay_method === m).length;
     $('metrics').innerHTML = `
       <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b><span>${valid.length} transaksi</span></div>
-      <div class="metric"><small>Tunai</small><b>Rp ${rp(cash)}</b><span>${valid.filter(o => o.pay_method === 'tunai').length} transaksi</span></div>
-      <div class="metric"><small>QRIS</small><b>Rp ${rp(qris)}</b><span>${valid.filter(o => o.pay_method === 'qris').length} transaksi</span></div>
-      <div class="metric"><small>Ongkir tercatat</small><b>Rp ${rp(ongkir)}</b><span>Di luar penjualan</span></div>
-      ${canceled ? `<div class="metric"><small>Dibatalkan</small><b>${canceled}</b><span>Tidak dihitung</span></div>` : ''}
-      <div class="metric need-laba" id="usedMetric"></div><div class="metric lead need-laba" id="profitMetric"></div>`;
+      <div class="metric lead need-laba" id="profitMetric"></div>
+      <div class="mini-stats">
+        <span><small>Tunai</small> Rp ${rp(cash)} <i>${nPay('tunai')}×</i></span>
+        <span><small>QRIS</small> Rp ${rp(qris)} <i>${nPay('qris')}×</i></span>
+        <span title="Di luar penjualan"><small>Ongkir</small> Rp ${rp(ongkir)}</span>
+        <span class="need-laba" id="usedMetric" title="Dari catatan pembelian & produksi"></span>
+        ${canceled ? `<span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span>` : ''}
+      </div>`;
     // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama
     if (can('laba')) {
       const f = ymdLocal(from), t = ymdLocal(new Date(+to - 864e5));
       DB.materialUsed(f, t).then(used => {
         if (range[0] !== from) return;   // periode sudah diganti
         const profit = total - used;
-        $('usedMetric').innerHTML = `<small>Bahan terpakai</small><b>Rp ${rp(used)}</b><span>dari catatan pembelian &amp; produksi</span>`;
+        $('usedMetric').innerHTML = `<small>Bahan terpakai</small> Rp ${rp(used)}`;
         $('profitMetric').innerHTML = `<small>Laba</small><b>Rp ${rp(profit)}</b><span>Penjualan − bahan terpakai${total ? ` · ${Math.round(profit / total * 100)}%` : ''}</span>`;
       }).catch(e => { $('profitMetric').innerHTML = `<small>Laba</small><span class="error">${esc(e.message)}</span>`; $('usedMetric').remove(); });
     }
