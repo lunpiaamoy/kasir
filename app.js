@@ -1053,7 +1053,6 @@
     const total = sum(valid, o => o.total);
     const cash = sum(valid.filter(o => o.pay_method === 'tunai'), o => o.total);
     const qris = sum(valid.filter(o => o.pay_method === 'qris'), o => o.total);
-    const ongkir = sum(valid, o => o.ongkir);
     const canceled = orders.length - valid.length;
 
     const nPay = m => valid.filter(o => o.pay_method === m).length;
@@ -1061,10 +1060,7 @@
       <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b>
         <span class="sale-split"><span>Transaksi (${valid.length})</span><span>Tunai Rp ${rp(cash)} (${nPay('tunai')})</span><span>QRIS Rp ${rp(qris)} (${nPay('qris')})</span></span></div>
       <div class="metric lead need-laba" id="profitMetric"></div>
-      <div class="mini-stats">
-        <span title="Di luar penjualan"><small>Ongkir</small> Rp ${rp(ongkir)}</span>
-        ${canceled ? `<span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span>` : ''}
-      </div>`;
+      ${canceled ? `<div class="mini-stats"><span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span></div>` : ''}`;
     // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama
     if (can('laba')) {
       const f = ymdLocal(from), t = ymdLocal(new Date(+to - 864e5));
