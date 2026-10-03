@@ -754,6 +754,15 @@
 
   // ---------------------------------------------------------------- Stock
   let editingId = null;
+  // Ikon garis (SVG) untuk tombol stok
+  const svg = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    plus:  svg('<path d="M12 5v14M5 12h14"/>'),
+    minus: svg('<path d="M5 12h14"/>'),
+    move:  svg('<path d="M7 7h12l-3-3M17 17H5l3 3"/>'),
+    card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
+    edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
+  };
   function renderStock() {
     const low = products.filter(p => p.active && p.stock <= p.min_stock);
     const tokoEmpty = products.filter(p => p.active && tokoOf(p) <= 0 && homeOf(p) > 0);
@@ -772,11 +781,11 @@
           <td class="num stock-num total">${p.stock}</td>
           <td data-sort="${p.stock - p.min_stock}" title="Batas minimum ${p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'}</td>
           <td><div class="stock-actions">
-            <button class="stock-btn plus need-stok_masuk" data-act="plus" data-id="${p.id}" title="Tambah stok" aria-label="Tambah stok ${esc(p.name)}">+</button>
-            <button class="stock-btn minus need-stok_kurang" data-act="minus" data-id="${p.id}" title="Kurangi stok" aria-label="Kurangi stok ${esc(p.name)}">−</button>
-            <button class="stock-btn move need-stok_pindah" data-act="move" data-id="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)}">⇄</button>
-            <button class="stock-btn plain" data-card="${p.id}" title="Kartu stok (riwayat)" aria-label="Kartu stok ${esc(p.name)}">☰</button>
-            <button class="stock-btn plain need-produk_ubah" data-edit="${p.id}" title="Ubah produk" aria-label="Ubah ${esc(p.name)}">✎</button>
+            <button class="stock-btn plus need-stok_masuk" data-act="plus" data-id="${p.id}" title="Tambah stok" aria-label="Tambah stok ${esc(p.name)}">${ICON.plus}</button>
+            <button class="stock-btn minus need-stok_kurang" data-act="minus" data-id="${p.id}" title="Kurangi stok" aria-label="Kurangi stok ${esc(p.name)}">${ICON.minus}</button>
+            <button class="stock-btn move need-stok_pindah" data-act="move" data-id="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)}">${ICON.move}</button>
+            <button class="stock-btn plain" data-card="${p.id}" title="Kartu stok (riwayat)" aria-label="Kartu stok ${esc(p.name)}">${ICON.card}</button>
+            <button class="stock-btn plain need-produk_ubah" data-edit="${p.id}" title="Ubah produk" aria-label="Ubah ${esc(p.name)}">${ICON.edit}</button>
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="6">Belum ada produk.</td></tr>'}</tbody>`;
   }
