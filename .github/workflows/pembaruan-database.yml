@@ -1,0 +1,27 @@
+name: Pembaruan database
+
+# Setiap ada perubahan file SQL yang masuk ke main, jalankan otomatis di Supabase.
+# Bisa juga dijalankan manual: tab Actions → Pembaruan database → Run workflow.
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/*.sql', 'supabase/pasang_pembaruan.sh', '.github/workflows/pembaruan-database.yml']
+  workflow_dispatch:
+
+concurrency: pembaruan-database
+
+jobs:
+  pasang:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Jalankan file SQL yang belum
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::Secret SUPABASE_DB_URL belum diisi, pembaruan database dilewati."
+            exit 0
+          fi
+          command -v psql >/dev/null || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+          bash supabase/pasang_pembaruan.sh

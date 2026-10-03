@@ -7,7 +7,7 @@
 
   // Fungsi/tabel/kolom belum ada di database → file SQL pembaruan belum dijalankan
   const NOT_UPDATED = ['PGRST202', 'PGRST205', '42P01', '42703', '42883'];
-  const UPDATE_MSG = 'Database belum diperbarui. Jalankan file SQL pembaruan terbaru di folder supabase (002 sampai 014, yang belum) di Supabase (SQL Editor → Run).';
+  const UPDATE_MSG = 'Database belum diperbarui. Pembaruan terpasang otomatis beberapa menit setelah merge: tunggu sebentar lalu tekan ↻. Kalau tetap muncul, buka GitHub → Actions → Pembaruan database untuk melihat sebabnya.';
   const DENIED_MSG = 'Akun ini tidak punya wewenang untuk ini. Minta pemilik mengaturnya di Pengaturan → Staf → Wewenang.';
   // Wewenang kasir per tab dan bawaannya (sama dengan perm_defaults()/perm_parent() di 008).
   // Pilihan di dalam tab hanya berlaku kalau tabnya boleh. Pemilik selalu boleh semua.
