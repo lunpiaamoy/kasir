@@ -742,3 +742,17 @@ label { color: #5a4a46; }
 /* ---- Bilah info ---- */
 .update-bar { background: linear-gradient(90deg, var(--amoy-tint), #fff); border-bottom: 1px solid var(--line); }
 .offline-bar { border-bottom: 1px solid #f1c8c4; }
+
+/* Tombol stok: + tambah, − kurangi, ⇄ pindah */
+.stock-btn { width: 40px; min-width: 40px; height: 40px; padding: 0; border-radius: 10px; font-size: 22px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid; background: #fff; cursor: pointer; }
+.stock-btn.plus  { color: #1f7a3f; border-color: #9fd3b0; background: #eefaf2; }
+.stock-btn.minus { color: #b42318; border-color: #f1b0a8; background: #fdf0ee; }
+.stock-btn.move  { color: #7a3b12; border-color: #e3c4a3; background: #fbf3ea; font-size: 20px; }
+.stock-btn:hover { filter: brightness(.96); }
+.stock-btn:active { transform: scale(.95); }
+@media (min-width: 821px) {
+  .add-stock.stock-adj { flex-wrap: nowrap; }
+  .add-stock.stock-adj input { width: 64px; }
+  .add-stock.stock-adj select { width: auto; }
+}

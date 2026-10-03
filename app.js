@@ -763,7 +763,7 @@
       ? `<br><b class="warn-text">Toko kosong, ada di rumah:</b> ${tokoEmpty.map(p => esc(`${p.category} ${p.name} (${homeOf(p)})`)).join(', ')}.` : '');
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
     $('stockTable').innerHTML = `
-      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort>Tambah stok</th><th></th></tr></thead>
+      <thead><tr><th>Jenis</th><th>Produk</th><th class="num">Harga</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort>Tambah / kurangi stok</th><th></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
         <tr class="${p.active ? '' : 'dim'}">
           <td>${esc(p.category)}</td>
@@ -773,13 +773,14 @@
           <td class="num stock-num">${homeOf(p)}</td>
           <td class="num stock-num total">${p.stock}</td>
           <td data-sort="${p.stock - p.min_stock}">${p.stock <= 0 ? stockChip(p) : p.stock <= p.min_stock ? '<span class="chip warn">Menipis</span>' : '<span class="chip ok">Aman</span>'} <span class="muted">min ${p.min_stock}</span></td>
-          <td><div class="add-stock need-stok_ubah">
-            <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Tambah stok ${esc(p.name)}">
+          <td><div class="add-stock stock-adj need-stok_ubah">
+            <input inputmode="numeric" placeholder="0" id="add-${p.id}" aria-label="Jumlah stok ${esc(p.name)}">
             <select id="loc-${p.id}" aria-label="Lokasi"><option value="toko">di Toko</option><option value="rumah">di Rumah</option></select>
-            <button class="ghost small" data-addstock="${p.id}">Tambah</button>
+            <button class="stock-btn plus need-stok_masuk" data-addstock="${p.id}" data-sign="1" title="Tambah stok" aria-label="Tambah stok ${esc(p.name)}">+</button>
+            <button class="stock-btn minus need-stok_kurang" data-addstock="${p.id}" data-sign="-1" title="Kurangi stok" aria-label="Kurangi stok ${esc(p.name)}">−</button>
           </div></td>
           <td><div class="add-stock">
-            <button class="ghost small need-stok_pindah" data-move="${p.id}">Pindah</button>
+            <button class="stock-btn move need-stok_pindah" data-move="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)} toko ↔ rumah">⇄</button>
             <button class="ghost small" data-card="${p.id}">Kartu stok</button>
             <button class="ghost small need-produk_ubah" data-edit="${p.id}">Ubah</button>
           </div></td>
@@ -791,8 +792,8 @@
     if (t.dataset.addstock) {
       const id = Number(t.dataset.addstock);
       const raw = $('add-' + id).value.trim();
-      const n = (raw.startsWith('-') ? -1 : 1) * toInt(raw);
-      if (!n) return toast('Isi jumlah stok yang mau ditambahkan', true);
+      const n = (t.dataset.sign === '-1' || raw.startsWith('-') ? -1 : 1) * toInt(raw);
+      if (!n) return toast(`Isi jumlah stok yang mau ${t.dataset.sign === '-1' ? 'dikurangi' : 'ditambahkan'}`, true);
       if (n < 0 && !can('stok_kurang')) return toast('Akun ini tidak punya wewenang mengurangi stok', true);
       if (n > 0 && !can('stok_masuk')) return toast('Akun ini tidak punya wewenang menambah stok', true);
       const loc = $('loc-' + id).value;
