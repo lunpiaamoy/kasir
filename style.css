@@ -845,3 +845,58 @@ label { color: #5a4a46; }
 /* Halaman login: sapaan */
 .login-card .login-welcome { margin: 4px 0 10px; text-align: center; font-family: "DM Serif Display", Georgia, serif; font-weight: 400;
   font-size: 30px; color: var(--amoy); letter-spacing: .01em; }
+
+/* ================= Halaman login (v2) ================= */
+.login { background:
+    radial-gradient(520px 520px at 8% 10%, rgba(140, 28, 34, .12), transparent 70%),
+    radial-gradient(460px 460px at 92% 90%, rgba(176, 141, 87, .22), transparent 70%), var(--ground); }
+.login-shell { width: min(860px, 100%); display: grid; grid-template-columns: 1fr 1.1fr; border-radius: 26px; overflow: hidden;
+  background: var(--surface); box-shadow: 0 24px 60px rgba(74, 28, 22, .18), 0 2px 6px rgba(74, 28, 22, .06); }
+.login-brand { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  gap: 6px; padding: 40px 28px; color: #fff; overflow: hidden;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cpath d='M22 4l6 18-6 18-6-18z' fill='none' stroke='%23d8bd8a' stroke-opacity='.16' stroke-width='1.2'/%3E%3Ccircle cx='0' cy='0' r='2' fill='%23d8bd8a' fill-opacity='.18'/%3E%3Ccircle cx='44' cy='44' r='2' fill='%23d8bd8a' fill-opacity='.18'/%3E%3C/svg%3E"),
+    linear-gradient(160deg, #a5262d 0%, #8c1c22 50%, #5e1015 100%); }
+.login-brand::before, .login-brand::after { content: ""; position: absolute; border-radius: 50%; border: 1.5px solid rgba(216, 189, 138, .35); }
+.login-brand::before { width: 340px; height: 340px; top: -120px; left: -140px; }
+.login-brand::after  { width: 260px; height: 260px; bottom: -110px; right: -100px; }
+.login-badge { width: 148px; height: 148px; border-radius: 50%; background: #fff; display: grid; place-items: center; margin-bottom: 14px;
+  box-shadow: 0 0 0 6px rgba(216, 189, 138, .35), 0 12px 30px rgba(0, 0, 0, .25); }
+.login-badge img { width: 112px; height: auto; display: block; margin: 0; }
+.login-tag { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #ecd9b2; }
+.login-store { margin: 0; font-family: var(--f-display); font-size: 34px; line-height: 1.1; }
+.login-addr { margin: 4px 0 0; font-size: 14px; color: rgba(255, 255, 255, .78); }
+.login-shell .login-card { width: auto; border: 0; border-radius: 0; box-shadow: none; padding: 40px 40px 28px; overflow: visible; }
+.login-shell .login-card::before { display: none; }
+.login-hello { margin: 0; font-size: 14px; font-weight: 600; color: var(--gold, #b08d57); }
+.login-card .login-welcome { text-align: left; margin: 2px 0 4px; font-size: 34px; padding-bottom: 0; }
+.login-sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+.login-field { position: relative; }
+.login-field > svg { position: absolute; left: 13px; top: 50%; width: 19px; height: 19px; transform: translateY(-50%);
+  fill: none; stroke: var(--muted); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.login-field input { width: 100%; padding-left: 42px; height: 46px; border-radius: 12px; background: #fcfaf7; }
+.login-field input:focus { background: #fff; }
+.login-field:focus-within > svg { stroke: var(--amoy); }
+.login-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; min-height: 0 !important; padding: 0;
+  border: 0; background: transparent; border-radius: 8px; display: grid; place-items: center; cursor: pointer; box-shadow: none; }
+.login-eye svg { width: 20px; height: 20px; fill: none; stroke: var(--muted); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.login-eye.on svg { stroke: var(--amoy); }
+.login-field input#loginPassword { padding-right: 46px; }
+.login-shell .login-card .primary { height: 48px; font-size: 16px; border-radius: 12px; margin-top: 22px; }
+.login-foot { margin: 14px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+.login-foot::before { content: "🔒 "; }
+@media (max-width: 720px) {
+  .login { padding: 0; place-items: stretch; }
+  .login-shell { grid-template-columns: 1fr; border-radius: 0; min-height: 100vh; box-shadow: none; align-content: start; }
+  .login-brand { padding: 34px 20px 46px; }
+  .login-badge { width: 108px; height: 108px; margin-bottom: 10px; }
+  .login-badge img { width: 82px; }
+  .login-store { font-size: 28px; }
+  .login-shell .login-card { margin: -26px 14px 24px; padding: 26px 22px 20px; border-radius: 22px; position: relative;
+    box-shadow: 0 14px 34px rgba(74, 28, 22, .14); }
+  .login-card .login-welcome { font-size: 28px; }
+}
+.login-badge { position: relative; z-index: 1; overflow: hidden; }
+.login-badge img { width: 104px; border-radius: 50%; clip-path: circle(46%); }
+.login-brand > p { position: relative; z-index: 1; }
+@media (max-width: 720px) { .login-shell { background: var(--ground); } .login-badge img { width: 78px; } }
