@@ -924,5 +924,4 @@ label { color: #5a4a46; }
 .login-remember { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; font-size: 14px; font-weight: 500; color: var(--ink); cursor: pointer; }
 .login-remember input { width: 18px; height: 18px; accent-color: var(--amoy); margin: 0; }
 .login-shell .login-card .primary { margin-top: 16px; }
-#loginPassword { -webkit-user-select: none; user-select: none; }
 #onlineTable tr.me td { background: #fbf7ef; }

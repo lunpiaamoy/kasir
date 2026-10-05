@@ -171,7 +171,14 @@
     e.preventDefault();
     $('loginError').textContent = ''; $('loginBtn').disabled = true;
     try { localStorage.setItem('lunpiaRemember', $('loginRemember').checked ? '1' : '0'); } catch {}
-    try { await DB.signIn($('loginEmail').value.trim(), $('loginPassword').value); $('loginPassword').value = ''; }
+    const email = $('loginEmail').value.trim(), pw = $('loginPassword').value;
+    try {
+      await DB.signIn(email, pw);
+      // Tawarkan browser menyimpan login ini (Chrome/Edge/Android), supaya lain kali terisi otomatis.
+      // Safari/iPhone menawarkan sendiri dari formulir. Isian dikosongkan sesudahnya, bukan langsung.
+      if (window.PasswordCredential && !DB.demo) navigator.credentials.store(new PasswordCredential({ id: email, password: pw, name: email })).catch(() => {});
+      setTimeout(() => { $('loginPassword').value = ''; }, 3000);
+    }
     catch (err) { $('loginError').textContent = err.message; }
     finally { $('loginBtn').disabled = false; }
   });
