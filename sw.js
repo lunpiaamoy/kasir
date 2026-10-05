@@ -1,7 +1,7 @@
 // Service worker supaya kasir bisa dipasang di layar utama HP/tablet.
 // Selalu ambil versi terbaru dari internet dulu; salinan tersimpan hanya dipakai saat
 // offline, supaya tampilan tetap terbuka. Data (Supabase) dan CDN tidak disentuh.
-const CACHE = 'lunpia-kasir-v67';
+const CACHE = 'lunpia-kasir-v68';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {
