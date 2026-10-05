@@ -53,7 +53,16 @@
 
   // ------------------------------------------------------------------ Supabase
   function supabaseDb() {
-    const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+    // "Ingat saya": sesi login disimpan di localStorage (tetap masuk setelah browser ditutup)
+    // atau sessionStorage (keluar otomatis saat browser/tab ditutup).
+    const remember = () => { try { return localStorage.getItem('lunpiaRemember') !== '0'; } catch { return true; } };
+    const store = () => (remember() ? localStorage : sessionStorage);
+    const storage = {
+      getItem: k => { try { return store().getItem(k); } catch { return null; } },
+      setItem: (k, v) => { try { store().setItem(k, v); } catch {} },
+      removeItem: k => { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch {} },
+    };
+    const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storage, persistSession: true } });
     // Supabase membatasi 1000 baris per permintaan; ambil per halaman sampai habis.
     const all = async build => {
       const rows = [];
@@ -254,6 +263,14 @@
       },
       // Sinkron otomatis: panggil cb(namaTabel) setiap ada perubahan dari perangkat lain (012).
       // Hasil: fungsi untuk berhenti mendengarkan.
+      // Siapa yang sedang login (016): tiap perangkat mengirim statusnya ke kanal privat.
+      // onSync(daftar) dipanggil setiap ada yang masuk/keluar/berganti tab.
+      presence(meta, onSync, onStatus = () => {}) {
+        const ch = sb.channel('lunpia-online', { config: { private: true, presence: { key: meta.id } } });
+        ch.on('presence', { event: 'sync' }, () => onSync(Object.values(ch.presenceState()).map(l => l[0])));
+        ch.subscribe(async st => { onStatus(st); if (st === 'SUBSCRIBED') await ch.track(meta); });
+        return { update: m => ch.track(m), stop: () => { ch.untrack(); sb.removeChannel(ch); } };
+      },
       subscribe(cb, onStatus = () => {}) {
         const ch = sb.channel('lunpia-sinkron');
         ['orders', 'products', 'cash_days', 'cash_out', 'productions'].forEach(table =>
@@ -387,6 +404,10 @@
       async session() { return signedIn ? { user: { email: 'contoh@lunpia.local' } } : null; },
       onAuth(cb) { authCb = cb; },
       async signIn() { signedIn = true; authCb({ user: { email: 'contoh@lunpia.local' } }); },
+      presence(meta, onSync, onStatus = () => {}) {
+        setTimeout(() => { onStatus('SUBSCRIBED'); onSync([meta]); }, 0);
+        return { update: m => onSync([m]), stop: () => {} };
+      },
       async signOut() { signedIn = false; },
       // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
       async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },
