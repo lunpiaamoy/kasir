@@ -110,17 +110,15 @@
     s ? showApp(s) : showLogin();
   }
 
-  const greeting = () => { const h = new Date().getHours(); return h < 11 ? 'Selamat pagi' : h < 15 ? 'Selamat siang' : h < 18 ? 'Selamat sore' : 'Selamat malam'; };
   // Sapaan kecil di atas halaman Kasir
   function renderHello(email) {
     const nm = (email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    $('helloBar').innerHTML = `<span class="hello-hi">${greeting()}${nm ? `, <b>${esc(nm)}</b>` : ''} 👋</span>
+    $('helloBar').innerHTML = `<span class="hello-hi">Halo${nm ? `, <b>${esc(nm)}</b>` : ''} 👋</span>
       <span class="hello-date">${esc(longDate(new Date()))}</span>`;
   }
   function showLogin() {
     $('topbar').hidden = true; $('app').hidden = true; $('loginView').hidden = false;
     const h = new Date().getHours();
-    $('loginHello').textContent = greeting();
     $('loginStore').textContent = STORE?.name || 'Lunpia Amoy';
     $('loginAddr').textContent = STORE?.address || '';
   }
