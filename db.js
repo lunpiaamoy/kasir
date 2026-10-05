@@ -263,14 +263,10 @@
       },
       // Sinkron otomatis: panggil cb(namaTabel) setiap ada perubahan dari perangkat lain (012).
       // Hasil: fungsi untuk berhenti mendengarkan.
-      // Siapa yang sedang login (016): tiap perangkat mengirim statusnya ke kanal privat.
-      // onSync(daftar) dipanggil setiap ada yang masuk/keluar/berganti tab.
-      presence(meta, onSync, onStatus = () => {}) {
-        const ch = sb.channel('lunpia-online', { config: { private: true, presence: { key: meta.id } } });
-        ch.on('presence', { event: 'sync' }, () => onSync(Object.values(ch.presenceState()).map(l => l[0])));
-        ch.subscribe(async st => { onStatus(st); if (st === 'SUBSCRIBED') await ch.track(meta); });
-        return { update: m => ch.track(m), stop: () => { ch.untrack(); sb.removeChannel(ch); } };
-      },
+      // Siapa yang sedang login (017): tanda "masih aktif" per perangkat
+      async heartbeat(device, info) { const { error } = await sb.rpc('heartbeat', { p_device: device, p_info: info }); fail(error); },
+      async heartbeatEnd(device) { await sb.rpc('heartbeat_end', { p_device: device }); },
+      async onlineDevices() { const { data, error } = await sb.rpc('online_devices'); fail(error); return data || []; },
       subscribe(cb, onStatus = () => {}) {
         const ch = sb.channel('lunpia-sinkron');
         ['orders', 'products', 'cash_days', 'cash_out', 'productions'].forEach(table =>
@@ -390,6 +386,7 @@
     const notaLabel = o => `(${o.year}) ${String(o.seq).padStart(5, '0')}`;
     const demoLog = (db, action, ref, detail) =>
       (db.log ||= []).push({ id: db.nextId++, at: new Date().toISOString(), actor: 'contoh@lunpia.local', action, ref, detail });
+    let demoDevice = null;
     let signedIn = true;
     let authCb = () => {};
     // HPP per pcs seperti product_cost() di database: dari resep, kalau tidak ada dari HPP manual
@@ -404,10 +401,10 @@
       async session() { return signedIn ? { user: { email: 'contoh@lunpia.local' } } : null; },
       onAuth(cb) { authCb = cb; },
       async signIn() { signedIn = true; authCb({ user: { email: 'contoh@lunpia.local' } }); },
-      presence(meta, onSync, onStatus = () => {}) {
-        setTimeout(() => { onStatus('SUBSCRIBED'); onSync([meta]); }, 0);
-        return { update: m => onSync([m]), stop: () => {} };
-      },
+      async heartbeat(device, info) { demoDevice = { device_id: device, email: 'contoh@lunpia.local', role: 'pemilik', ...info,
+        since: demoDevice?.since || new Date().toISOString(), last_seen: new Date().toISOString() }; },
+      async heartbeatEnd() { demoDevice = null; },
+      async onlineDevices() { return demoDevice ? [{ ...demoDevice, now_at: new Date().toISOString() }] : []; },
       async signOut() { signedIn = false; },
       // Mode contoh selalu pemilik (untuk mencoba tampilan kasir: localStorage lunpiaPosDemoRole = 'kasir')
       async myRole() { try { return localStorage.getItem('lunpiaPosDemoRole') || 'pemilik'; } catch { return 'pemilik'; } },

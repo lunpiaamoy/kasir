@@ -149,7 +149,7 @@
       await loadProducts();
       refreshPendingCount();
       startSync();
-      startPresence(session.user?.email);
+      startHeartbeat();
     } catch (e) { toast(e.message, true); }
   }
   let role = null, perms = {}, opts = { cash_out_max: 0, cancel_reason_required: false };
@@ -176,7 +176,7 @@
     finally { $('loginBtn').disabled = false; }
   });
   $('logoutBtn').addEventListener('click', async () => {
-    stopSync?.(); stopSync = null; presence?.stop(); presence = null;
+    stopSync?.(); stopSync = null; stopHeartbeat(); await DB.heartbeatEnd(deviceId).catch(() => {});
     await DB.signOut(); appShown = false; role = null; perms = {}; document.body.classList.remove('is-owner');
     document.body.className = document.body.className.replace(/\bcan-\S+/g, '').trim();
     resetCart(); showLogin();
@@ -187,7 +187,7 @@
   document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => openTab(btn.dataset.tab)));
   function openTab(name) {
     currentTab = name;
-    if (presence && presMeta) presence.update(presMeta = { ...presMeta, tab: name });
+    if (beatTimer) beat();
     document.querySelectorAll('.tab').forEach(b => b.toggleAttribute('aria-current', b.dataset.tab === name));
     document.querySelectorAll('.tab[aria-current]').forEach(b => b.setAttribute('aria-current', 'page'));
     document.querySelectorAll('.view').forEach(v => (v.hidden = v.id !== 'view-' + name));
@@ -2188,9 +2188,10 @@
   let stopSync = null, syncTimer = null;
   const changed = new Set();
   // ---------------------------------------------------------------- Siapa yang sedang login
-  let presence = null, presMeta = null, onlineList = [], onlineState = '';
-  const deviceId = (() => { try { let id = sessionStorage.getItem('lunpiaDevId');
-    if (!id) sessionStorage.setItem('lunpiaDevId', id = Math.random().toString(36).slice(2, 10)); return id; } catch { return Math.random().toString(36).slice(2, 10); } })();
+  // Tiap perangkat mengirim "masih aktif" ± tiap 45 detik (017). Online = aktif < 3 menit.
+  let beatTimer = null, onlineTimer = null, onlineErr = '';
+  const deviceId = (() => { try { let id = localStorage.getItem('lunpiaDevId');
+    if (!id) localStorage.setItem('lunpiaDevId', id = Math.random().toString(36).slice(2, 12)); return id; } catch { return Math.random().toString(36).slice(2, 12); } })();
   function deviceName() {
     const ua = navigator.userAgent, touch = navigator.maxTouchPoints > 1;
     const os = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone'
@@ -2201,26 +2202,33 @@
     const app = matchMedia('(display-mode: standalone)').matches || navigator.standalone ? ' · aplikasi terpasang' : '';
     return os + (br ? ' · ' + br : '') + app;
   }
-  function startPresence(email) {
-    presence?.stop();
-    presMeta = { id: deviceId, email: email || '', role, device: deviceName(), tab: currentTab, since: new Date().toISOString() };
-    presence = DB.presence(presMeta, list => { onlineList = list; renderOnline(); }, st => { onlineState = st; renderOnline(); });
-  }
-  function renderOnline() {
-    if (!$('onlineTable')) return;
-    const list = [...onlineList].sort((a, b) => (a.email || '').localeCompare(b.email || '') || (a.since || '').localeCompare(b.since || ''));
-    const people = new Set(list.map(x => x.email)).size;
-    $('onlineCount').textContent = list.length ? `${people} orang · ${list.length} perangkat` : '';
+  const beat = () => { if (role && document.visibilityState === 'visible')
+    DB.heartbeat(deviceId, { device: deviceName(), tab: currentTab }).catch(() => {}); };
+  function startHeartbeat() { stopHeartbeat(); beat(); beatTimer = setInterval(beat, 45000); }
+  function stopHeartbeat() { clearInterval(beatTimer); beatTimer = null; }
+  document.addEventListener('visibilitychange', () => { if (beatTimer && document.visibilityState === 'visible') beat(); });
+
+  async function renderOnline() {
+    clearTimeout(onlineTimer);
+    if (!$('onlineTable') || currentTab !== 'pengaturan' || !isOwner()) return;
+    let list = [];
+    try { list = await DB.onlineDevices(); onlineErr = ''; } catch (e) { onlineErr = e.message; }
+    const now = list[0]?.now_at ? new Date(list[0].now_at) : new Date();
+    const isOn = x => now - new Date(x.last_seen) < 3 * 60000;
+    const on = list.filter(isOn), off = list.filter(x => !isOn(x));
+    $('onlineCount').textContent = on.length ? `${new Set(on.map(x => x.email)).size} orang · ${on.length} perangkat online` : '';
     const tabName = t => document.querySelector(`.tab[data-tab="${t}"]`)?.childNodes[0]?.textContent.trim() || (t === 'pengaturan' ? 'Pengaturan' : t || '-');
-    const ago = iso => { const m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
+    const ago = iso => { const m = Math.max(0, Math.round((now - new Date(iso)) / 60000));
       return m < 1 ? 'baru saja' : m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.floor(m / 60)} jam lalu` : `${Math.floor(m / 1440)} hari lalu`; };
-    const err = /ERROR|TIMED_OUT/.test(onlineState);
-    $('onlineTable').innerHTML = `<thead><tr><th>Akun</th><th>Perangkat</th><th>Sedang di</th><th>Sejak</th></tr></thead>
-      <tbody>${list.length ? list.map(x => `<tr${x.id === deviceId ? ' class="me"' : ''}>
-        <td><b>${esc((x.email || '').split('@')[0])}</b> <span class="muted">${esc(x.role === 'pemilik' ? 'Pemilik' : 'Kasir')}</span>${x.id === deviceId ? ' <span class="chip ok">Perangkat ini</span>' : ''}</td>
-        <td>${esc(x.device || '-')}</td><td>${esc(tabName(x.tab))}</td>
-        <td data-sort="${esc(x.since || '')}" title="${esc(new Date(x.since).toLocaleString('id-ID'))}">${esc(ago(x.since))}</td></tr>`).join('')
-      : `<tr><td class="empty" colspan="4">${err ? 'Daftar belum aktif. Tunggu pembaruan database otomatis (file 016) selesai, lalu tekan ↻.' : 'Memuat…'}</td></tr>`}</tbody>`;
+    const row = x => `<tr${x.device_id === deviceId ? ' class="me"' : ''}>
+        <td><b>${esc((x.email || '').split('@')[0])}</b> <span class="muted">${esc(x.role === 'pemilik' ? 'Pemilik' : 'Kasir')}</span>${x.device_id === deviceId ? ' <span class="chip plain">Perangkat ini</span>' : ''}</td>
+        <td>${esc(x.device || '-')}</td>
+        <td data-sort="${isOn(x) ? 1 : 0}">${isOn(x) ? `<span class="chip ok">Online</span> <span class="muted">di ${esc(tabName(x.tab))}</span>` : `<span class="muted">Terakhir aktif ${esc(ago(x.last_seen))}</span>`}</td>
+        <td data-sort="${esc(x.since || '')}" title="${esc(new Date(x.since).toLocaleString('id-ID'))}">${isOn(x) ? esc(ago(x.since)) : '—'}</td></tr>`;
+    $('onlineTable').innerHTML = `<thead><tr><th>Akun</th><th>Perangkat</th><th>Status</th><th>Online sejak</th></tr></thead>
+      <tbody>${list.length ? [...on, ...off].map(row).join('')
+        : `<tr><td class="empty" colspan="4">${onlineErr ? esc(onlineErr) : 'Belum ada data. Tunggu sebentar lalu tekan ↻.'}</td></tr>`}</tbody>`;
+    onlineTimer = setTimeout(renderOnline, 30000);   // perbarui selama Pengaturan terbuka
   }
 
   function startSync() {
