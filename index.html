@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=64">
+<link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
 
@@ -63,18 +63,18 @@
       <p class="login-store" id="loginStore">Lunpia Amoy</p>
       <p class="login-addr" id="loginAddr"></p>
     </aside>
-    <form class="login-card" id="loginForm" aria-label="Masuk ke kasir">
+    <form class="login-card" id="loginForm" aria-label="Masuk ke kasir" method="post" action="#">
       <h1 class="login-welcome">Selamat Datang !</h1>
       <p class="login-sub">Masuk untuk mulai berjualan hari ini.</p>
       <label for="loginEmail">Email</label>
       <div class="login-field">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>
-        <input id="loginEmail" type="email" autocomplete="username" placeholder="nama@email.com" required>
+        <input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="nama@email.com" required>
       </div>
       <label for="loginPassword">Password</label>
       <div class="login-field">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required spellcheck="false">
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required spellcheck="false">
       </div>
       <label class="login-remember"><input type="checkbox" id="loginRemember" checked> Ingat saya di perangkat ini</label>
       <button class="primary" type="submit" id="loginBtn">Masuk</button>
@@ -410,9 +410,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=64"></script>
-<script src="db.js?v=64"></script>
-<script src="app.js?v=64"></script>
+<script src="config.js?v=65"></script>
+<script src="db.js?v=65"></script>
+<script src="app.js?v=65"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
