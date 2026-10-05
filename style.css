@@ -927,7 +927,11 @@ label { color: #5a4a46; }
 #onlineTable tr.me td { background: #fbf7ef; }
 
 /* Logo di bilah atas: logo saja, tanpa lingkaran (latar sudah putih) */
-.brand img { width: auto; height: 42px; padding: 0; border-radius: 0; background: none; box-shadow: none; object-fit: contain; }
+.brand img { width: auto; height: 34px; padding: 0; border-radius: 0; background: none; box-shadow: none; object-fit: contain; }
+/* Ruang napas: logo tidak menempel ke garis marun, ada pemisah tipis ke tulisan */
+.topbar { padding-top: 12px; padding-bottom: 8px; }
+.brand { gap: 12px; }
+.brand > div { padding-left: 12px; border-left: 1px solid var(--line); }
 
 /* Login: akun yang pernah dipakai di perangkat ini */
 .login-accounts { margin: 0 0 12px; }
