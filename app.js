@@ -118,6 +118,7 @@
   }
   function showLogin() {
     $('topbar').hidden = true; $('app').hidden = true; $('loginView').hidden = false;
+    prefillLogin();
     const h = new Date().getHours();
     $('loginStore').textContent = STORE?.name || 'Lunpia Amoy';
     $('loginAddr').textContent = STORE?.address || '';
@@ -127,6 +128,32 @@
     e.preventDefault(); if (ev !== 'dragstart') $('loginError').textContent = 'Password harus diketik, tidak bisa disalin atau ditempel.';
   }));
   try { $('loginRemember').checked = localStorage.getItem('lunpiaRemember') !== '0'; } catch {}
+  // Akun yang pernah login di perangkat ini (hanya email, password TIDAK disimpan aplikasi)
+  const savedEmails = () => { try { return JSON.parse(localStorage.getItem('lunpiaEmails') || '[]'); } catch { return []; } };
+  const setSavedEmails = l => { try { localStorage.setItem('lunpiaEmails', JSON.stringify(l.slice(0, 5))); } catch {} };
+  function renderAccounts() {
+    const list = savedEmails();
+    $('loginAccounts').hidden = list.length < 1;
+    $('loginAccounts').innerHTML = list.length ? `<small>Akun di perangkat ini</small><div>${list.map(e =>
+      `<span class="acc${e === $('loginEmail').value ? ' on' : ''}"><button type="button" data-acc="${esc(e)}">${esc(e.split('@')[0])}</button><button type="button" class="x" data-accdel="${esc(e)}" aria-label="Hapus ${esc(e)} dari daftar" title="Hapus dari daftar">×</button></span>`).join('')}</div>` : '';
+  }
+  $('loginAccounts').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.acc) { $('loginEmail').value = b.dataset.acc; $('loginPassword').value = ''; renderAccounts(); $('loginPassword').focus(); }
+    if (b.dataset.accdel) { setSavedEmails(savedEmails().filter(x => x !== b.dataset.accdel)); if ($('loginEmail').value === b.dataset.accdel) $('loginEmail').value = ''; renderAccounts(); }
+  });
+  // Isi email terakhir, lalu minta browser (Chrome/Edge/Android) memberikan password yang sudah disimpan
+  async function prefillLogin() {
+    if (!$('loginEmail').value) $('loginEmail').value = savedEmails()[0] || '';
+    renderAccounts();
+    if (window.PasswordCredential && !DB.demo && navigator.credentials?.get) {
+      try {
+        const c = await navigator.credentials.get({ password: true, mediation: 'optional' });
+        if (c?.password && !$('loginPassword').value) { $('loginEmail').value = c.id; $('loginPassword').value = c.password; renderAccounts(); }
+      } catch {}
+    }
+    ($('loginEmail').value ? $('loginPassword') : $('loginEmail')).focus();
+  }
 
   let appShown = false;
   async function showApp(session) {
@@ -174,6 +201,7 @@
     const email = $('loginEmail').value.trim(), pw = $('loginPassword').value;
     try {
       await DB.signIn(email, pw);
+      if ($('loginRemember').checked) setSavedEmails([email.toLowerCase(), ...savedEmails().filter(x => x !== email.toLowerCase())]);
       // Tawarkan browser menyimpan login ini (Chrome/Edge/Android), supaya lain kali terisi otomatis.
       // Safari/iPhone menawarkan sendiri dari formulir. Isian dikosongkan sesudahnya, bukan langsung.
       if (window.PasswordCredential && !DB.demo) navigator.credentials.store(new PasswordCredential({ id: email, password: pw, name: email })).catch(() => {});

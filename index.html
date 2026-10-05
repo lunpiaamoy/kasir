@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=67">
+<link rel="stylesheet" href="style.css?v=68">
 </head>
 <body>
 
@@ -67,6 +67,7 @@
     <form class="login-card" id="loginForm" aria-label="Masuk ke kasir" method="post" action="#">
       <h1 class="login-welcome">Selamat Datang !</h1>
       <p class="login-sub">Masuk untuk mulai berjualan hari ini.</p>
+      <div class="login-accounts" id="loginAccounts" hidden></div>
       <label for="loginEmail">Email</label>
       <div class="login-field">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>
@@ -411,9 +412,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=67"></script>
-<script src="db.js?v=67"></script>
-<script src="app.js?v=67"></script>
+<script src="config.js?v=68"></script>
+<script src="db.js?v=68"></script>
+<script src="app.js?v=68"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
