@@ -112,7 +112,17 @@
 
   function showLogin() {
     $('topbar').hidden = true; $('app').hidden = true; $('loginView').hidden = false;
+    const h = new Date().getHours();
+    $('loginHello').textContent = h < 11 ? 'Selamat pagi ☀️' : h < 15 ? 'Selamat siang' : h < 18 ? 'Selamat sore' : 'Selamat malam 🌙';
+    $('loginStore').textContent = STORE?.name || 'Lunpia Amoy';
+    $('loginAddr').textContent = STORE?.address || '';
   }
+  $('loginEye').addEventListener('click', () => {
+    const i = $('loginPassword'), show = i.type === 'password';
+    i.type = show ? 'text' : 'password';
+    $('loginEye').classList.toggle('on', show);
+    $('loginEye').setAttribute('aria-label', show ? 'Sembunyikan password' : 'Lihat password');
+  });
 
   let appShown = false;
   async function showApp(session) {

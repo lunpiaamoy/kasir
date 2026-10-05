@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=58">
+<link rel="stylesheet" href="style.css?v=59">
 </head>
 <body>
 
@@ -55,16 +55,35 @@
 
 <!-- ============ Login ============ -->
 <section class="login" id="loginView" hidden>
-  <form class="login-card" id="loginForm" aria-label="Masuk ke kasir">
-    <img src="logo.jpg" alt="Lunpia Amoy">
-    <h1 class="login-welcome">Selamat Datang !</h1>
-    <label for="loginEmail">Email</label>
-    <input id="loginEmail" type="email" autocomplete="username" required>
-    <label for="loginPassword">Password</label>
-    <input id="loginPassword" type="password" autocomplete="current-password" required>
-    <button class="primary" type="submit" id="loginBtn">Masuk</button>
-    <p class="error" id="loginError" role="alert"></p>
-  </form>
+  <div class="login-shell">
+    <aside class="login-brand" aria-hidden="true">
+      <div class="login-badge"><img src="logo.jpg" alt=""></div>
+      <p class="login-tag">Semarang Legend · sejak 1930</p>
+      <p class="login-store" id="loginStore">Lunpia Amoy</p>
+      <p class="login-addr" id="loginAddr"></p>
+    </aside>
+    <form class="login-card" id="loginForm" aria-label="Masuk ke kasir">
+      <p class="login-hello" id="loginHello">Selamat pagi</p>
+      <h1 class="login-welcome">Selamat Datang !</h1>
+      <p class="login-sub">Masuk untuk mulai berjualan hari ini.</p>
+      <label for="loginEmail">Email</label>
+      <div class="login-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>
+        <input id="loginEmail" type="email" autocomplete="username" placeholder="nama@email.com" required>
+      </div>
+      <label for="loginPassword">Password</label>
+      <div class="login-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required>
+        <button type="button" class="login-eye" id="loginEye" aria-label="Lihat password" title="Lihat password">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <button class="primary" type="submit" id="loginBtn">Masuk</button>
+      <p class="error" id="loginError" role="alert"></p>
+      <p class="login-foot">Khusus pemilik &amp; staf Lunpia Amoy</p>
+    </form>
+  </div>
 </section>
 
 <main id="app" hidden>
@@ -386,9 +405,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=58"></script>
-<script src="db.js?v=58"></script>
-<script src="app.js?v=58"></script>
+<script src="config.js?v=59"></script>
+<script src="db.js?v=59"></script>
+<script src="app.js?v=59"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
