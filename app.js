@@ -760,8 +760,9 @@
     try { [rows, hidden] = await Promise.all([DB.listCustomers(), DB.listHiddenContacts()]); } catch (e) { toast(e.message, true); return; }
     const hiddenAt = new Map(hidden.map(h => [h.key, new Date(h.hidden_at)]));
     const map = new Map();
-    rows.filter(o => (o.customer_name || '').trim() || (o.customer_wa || '').trim()).forEach(o => {
-      const num = waNumber(o.customer_wa), key = num || 'n:' + o.customer_name.trim().toLowerCase();
+    // Hanya pembeli yang punya nomor WA yang masuk kontak
+    rows.filter(o => waNumber(o.customer_wa)).forEach(o => {
+      const key = waNumber(o.customer_wa);
       const c = map.get(key) || { key, name: '', wa: '', n: 0, spent: 0, last: '' };
       if (o.created_at >= c.last) { c.last = o.created_at; if (o.customer_name.trim()) c.name = o.customer_name.trim(); if (o.customer_wa) c.wa = o.customer_wa.trim(); }
       if ((o.address || '').trim() && o.created_at >= (c.addrAt || '')) { c.address = o.address.trim(); c.addrAt = o.created_at; }
@@ -790,7 +791,7 @@
             ${iconBtn('trash', 'danger need-kontak_hapus', `data-contactdel="${i}"`, 'Hapus kontak')}
           </div></td>
         </tr>`;
-      }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Nama dan nomor WA pembeli dari transaksi akan muncul di sini.</td></tr>'}</tbody>`;
+      }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Pembeli yang punya nomor WA akan muncul di sini.</td></tr>'}</tbody>`;
     filterContacts();
   }
   function filterContacts() {
