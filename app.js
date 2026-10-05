@@ -118,6 +118,7 @@
   }
   function showLogin() {
     $('topbar').hidden = true; $('app').hidden = true; $('loginView').hidden = false;
+    prefillLogin();
     const h = new Date().getHours();
     $('loginStore').textContent = STORE?.name || 'Lunpia Amoy';
     $('loginAddr').textContent = STORE?.address || '';
@@ -127,6 +128,53 @@
     e.preventDefault(); if (ev !== 'dragstart') $('loginError').textContent = 'Password harus diketik, tidak bisa disalin atau ditempel.';
   }));
   try { $('loginRemember').checked = localStorage.getItem('lunpiaRemember') !== '0'; } catch {}
+  // Akun yang pernah login di perangkat ini (hanya email, password TIDAK disimpan aplikasi)
+  const savedEmails = () => { try { return JSON.parse(localStorage.getItem('lunpiaEmails') || '[]'); } catch { return []; } };
+  const setSavedEmails = l => { try { localStorage.setItem('lunpiaEmails', JSON.stringify(l.slice(0, 5))); } catch {} };
+  function renderAccounts() {
+    const list = savedEmails();
+    $('loginAccounts').hidden = list.length < 1;
+    $('loginAccounts').innerHTML = list.length ? `<small>Akun di perangkat ini</small><div>${list.map(e =>
+      `<span class="acc${e === $('loginEmail').value ? ' on' : ''}"><button type="button" data-acc="${esc(e)}">${esc(e.split('@')[0])}</button><button type="button" class="x" data-accdel="${esc(e)}" aria-label="Hapus ${esc(e)} dari daftar" title="Hapus dari daftar">×</button></span>`).join('')}</div>` : '';
+  }
+  $('loginAccounts').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.acc) { $('loginEmail').value = b.dataset.acc; $('loginPassword').value = ''; renderAccounts(); $('loginPassword').focus(); }
+    if (b.dataset.accdel) { setSavedEmails(savedEmails().filter(x => x !== b.dataset.accdel)); if ($('loginEmail').value === b.dataset.accdel) $('loginEmail').value = ''; renderAccounts(); }
+  });
+  // Akun pemilik tidak pernah disimpan: tidak masuk daftar akun, tidak ditawarkan ke pengelola password,
+  // dan tidak diisi otomatis oleh aplikasi.
+  let pendingLogin = null;
+  const ownerEmails = () => { try { return JSON.parse(localStorage.getItem('lunpiaNoSave') || '[]'); } catch { return []; } };
+  function rememberLogin(r) {
+    const p = pendingLogin; pendingLogin = null;
+    if (!p) return;
+    if (r === 'pemilik') {
+      $('loginPassword').value = '';
+      setSavedEmails(savedEmails().filter(x => x !== p.email));
+      try { localStorage.setItem('lunpiaNoSave', JSON.stringify([...new Set([p.email, ...ownerEmails()])])); } catch {}
+      navigator.credentials?.preventSilentAccess?.().catch(() => {});
+      return;
+    }
+    if (p.remember) setSavedEmails([p.email, ...savedEmails().filter(x => x !== p.email)]);
+    // Tawarkan browser menyimpan login staf (Chrome/Edge/Android). Isian dikosongkan sesudahnya, bukan langsung.
+    if (window.PasswordCredential && !DB.demo) navigator.credentials.store(new PasswordCredential({ id: p.email, password: p.pw, name: p.email })).catch(() => {});
+    setTimeout(() => { $('loginPassword').value = ''; }, 3000);
+  }
+  // Isi email terakhir, lalu minta browser (Chrome/Edge/Android) memberikan password yang sudah disimpan
+  async function prefillLogin() {
+    setSavedEmails(savedEmails().filter(x => !ownerEmails().includes(x)));
+    if (!$('loginEmail').value) $('loginEmail').value = savedEmails()[0] || '';
+    renderAccounts();
+    if (window.PasswordCredential && !DB.demo && navigator.credentials?.get) {
+      try {
+        const c = await navigator.credentials.get({ password: true, mediation: 'optional' });
+        if (c?.password && !$('loginPassword').value && !ownerEmails().includes(String(c.id).toLowerCase())) {
+          $('loginEmail').value = c.id; $('loginPassword').value = c.password; renderAccounts(); }
+      } catch {}
+    }
+    ($('loginEmail').value ? $('loginPassword') : $('loginEmail')).focus();
+  }
 
   let appShown = false;
   async function showApp(session) {
@@ -137,6 +185,7 @@
     appShown = true;
     try {
       role = await DB.myRole();
+      rememberLogin(role);
       document.body.classList.toggle('is-owner', role === 'pemilik');
       perms = role ? await DB.myPerms(role) : {};
       opts = role ? await DB.myOptions().catch(() => opts) : opts;
@@ -173,13 +222,11 @@
     try { localStorage.setItem('lunpiaRemember', $('loginRemember').checked ? '1' : '0'); } catch {}
     const email = $('loginEmail').value.trim(), pw = $('loginPassword').value;
     try {
+      // Simpan atau tidak diputuskan setelah peran diketahui (lihat rememberLogin): akun pemilik tidak disimpan
+      pendingLogin = { email: email.toLowerCase(), pw, remember: $('loginRemember').checked };
       await DB.signIn(email, pw);
-      // Tawarkan browser menyimpan login ini (Chrome/Edge/Android), supaya lain kali terisi otomatis.
-      // Safari/iPhone menawarkan sendiri dari formulir. Isian dikosongkan sesudahnya, bukan langsung.
-      if (window.PasswordCredential && !DB.demo) navigator.credentials.store(new PasswordCredential({ id: email, password: pw, name: email })).catch(() => {});
-      setTimeout(() => { $('loginPassword').value = ''; }, 3000);
     }
-    catch (err) { $('loginError').textContent = err.message; }
+    catch (err) { pendingLogin = null; $('loginError').textContent = err.message; }
     finally { $('loginBtn').disabled = false; }
   });
   $('logoutBtn').addEventListener('click', async () => {

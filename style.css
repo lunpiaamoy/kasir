@@ -925,3 +925,16 @@ label { color: #5a4a46; }
 .login-remember input { width: 18px; height: 18px; accent-color: var(--amoy); margin: 0; }
 .login-shell .login-card .primary { margin-top: 16px; }
 #onlineTable tr.me td { background: #fbf7ef; }
+
+/* Logo di bilah atas: logo saja, tanpa lingkaran (latar sudah putih) */
+.brand img { width: auto; height: 42px; padding: 0; border-radius: 0; background: none; box-shadow: none; object-fit: contain; }
+
+/* Login: akun yang pernah dipakai di perangkat ini */
+.login-accounts { margin: 0 0 12px; }
+.login-accounts small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.login-accounts > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.login-accounts .acc { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: #fcfaf7; overflow: hidden; }
+.login-accounts .acc.on { border-color: var(--amoy); background: var(--amoy-tint); }
+.login-accounts .acc button { border: 0; background: none; box-shadow: none; min-height: 34px !important; padding: 0 6px 0 12px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.login-accounts .acc button.x { padding: 0 10px 0 4px; color: var(--muted); font-size: 16px; }
+.login-accounts .acc button.x:hover { color: var(--bad); }
