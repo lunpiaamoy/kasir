@@ -14,5 +14,6 @@ select file, case when ada then 'sudah' else 'BELUM' end as status from (values
   ('011', to_regclass('public.activity_log') is not null),
   ('012', to_regclass('public.app_state') is not null),
   ('013', to_regprocedure('public.move_stock(bigint, integer, text)') is not null),
-  ('014', to_regprocedure('public.staff_logins()') is not null)
+  ('014', to_regprocedure('public.staff_logins()') is not null),
+  ('016', exists (select 1 from pg_policies where policyname = 'staf lihat siapa online'))
 ) as t(file, ada) order by file;

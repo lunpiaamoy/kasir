@@ -97,7 +97,7 @@
       if (td.colSpan === 1 && td.dataset.label === undefined) td.dataset.label = heads[i] || '';
     }));
   }
-  ['recentTable', 'stockTable', 'contactTable', 'cashHistory', 'prodTable', 'prodBuyTable', 'prodOutTable', 'logTable', 'staffTable'].forEach(id => {
+  ['recentTable', 'stockTable', 'contactTable', 'cashHistory', 'prodTable', 'prodBuyTable', 'prodOutTable', 'logTable', 'staffTable', 'onlineTable'].forEach(id => {
     const t = $(id); t.classList.add('cards');
     new MutationObserver(() => labelCells(t)).observe(t, { childList: true, subtree: true });
   });
@@ -110,26 +110,23 @@
     s ? showApp(s) : showLogin();
   }
 
-  const greeting = () => { const h = new Date().getHours(); return h < 11 ? 'Selamat pagi' : h < 15 ? 'Selamat siang' : h < 18 ? 'Selamat sore' : 'Selamat malam'; };
   // Sapaan kecil di atas halaman Kasir
   function renderHello(email) {
     const nm = (email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    $('helloBar').innerHTML = `<span class="hello-hi">${greeting()}${nm ? `, <b>${esc(nm)}</b>` : ''} 👋</span>
+    $('helloBar').innerHTML = `<span class="hello-hi">Halo${nm ? `, <b>${esc(nm)}</b>` : ''} 👋</span>
       <span class="hello-date">${esc(longDate(new Date()))}</span>`;
   }
   function showLogin() {
     $('topbar').hidden = true; $('app').hidden = true; $('loginView').hidden = false;
     const h = new Date().getHours();
-    $('loginHello').textContent = greeting();
     $('loginStore').textContent = STORE?.name || 'Lunpia Amoy';
     $('loginAddr').textContent = STORE?.address || '';
   }
-  $('loginEye').addEventListener('click', () => {
-    const i = $('loginPassword'), show = i.type === 'password';
-    i.type = show ? 'text' : 'password';
-    $('loginEye').classList.toggle('on', show);
-    $('loginEye').setAttribute('aria-label', show ? 'Sembunyikan password' : 'Lihat password');
-  });
+  // Password di halaman login tidak bisa disalin, dipotong, ditempel, atau diseret
+  ['copy', 'cut', 'paste', 'drop', 'dragstart', 'contextmenu'].forEach(ev => $('loginPassword').addEventListener(ev, e => {
+    e.preventDefault(); if (ev !== 'dragstart') $('loginError').textContent = 'Password harus diketik, tidak bisa disalin atau ditempel.';
+  }));
+  try { $('loginRemember').checked = localStorage.getItem('lunpiaRemember') !== '0'; } catch {}
 
   let appShown = false;
   async function showApp(session) {
@@ -152,6 +149,7 @@
       await loadProducts();
       refreshPendingCount();
       startSync();
+      startPresence(session.user?.email);
     } catch (e) { toast(e.message, true); }
   }
   let role = null, perms = {}, opts = { cash_out_max: 0, cancel_reason_required: false };
@@ -172,12 +170,13 @@
   $('loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     $('loginError').textContent = ''; $('loginBtn').disabled = true;
-    try { await DB.signIn($('loginEmail').value.trim(), $('loginPassword').value); }
+    try { localStorage.setItem('lunpiaRemember', $('loginRemember').checked ? '1' : '0'); } catch {}
+    try { await DB.signIn($('loginEmail').value.trim(), $('loginPassword').value); $('loginPassword').value = ''; }
     catch (err) { $('loginError').textContent = err.message; }
     finally { $('loginBtn').disabled = false; }
   });
   $('logoutBtn').addEventListener('click', async () => {
-    stopSync?.(); stopSync = null;
+    stopSync?.(); stopSync = null; presence?.stop(); presence = null;
     await DB.signOut(); appShown = false; role = null; perms = {}; document.body.classList.remove('is-owner');
     document.body.className = document.body.className.replace(/\bcan-\S+/g, '').trim();
     resetCart(); showLogin();
@@ -188,6 +187,7 @@
   document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => openTab(btn.dataset.tab)));
   function openTab(name) {
     currentTab = name;
+    if (presence && presMeta) presence.update(presMeta = { ...presMeta, tab: name });
     document.querySelectorAll('.tab').forEach(b => b.toggleAttribute('aria-current', b.dataset.tab === name));
     document.querySelectorAll('.tab[aria-current]').forEach(b => b.setAttribute('aria-current', 'page'));
     document.querySelectorAll('.view').forEach(v => (v.hidden = v.id !== 'view-' + name));
@@ -1886,7 +1886,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  function renderSettings() { renderStaff(); renderLog(); }
+  function renderSettings() { renderStaff(); renderLog(); renderOnline(); }
 
   // ---- Catatan aktivitas (pemilik)
   let logDays = 7;
@@ -2187,6 +2187,42 @@
   // langsung diambil ulang. Tampilan yang sedang diisi (formulir, konfirmasi) tidak diganggu.
   let stopSync = null, syncTimer = null;
   const changed = new Set();
+  // ---------------------------------------------------------------- Siapa yang sedang login
+  let presence = null, presMeta = null, onlineList = [], onlineState = '';
+  const deviceId = (() => { try { let id = sessionStorage.getItem('lunpiaDevId');
+    if (!id) sessionStorage.setItem('lunpiaDevId', id = Math.random().toString(36).slice(2, 10)); return id; } catch { return Math.random().toString(36).slice(2, 10); } })();
+  function deviceName() {
+    const ua = navigator.userAgent, touch = navigator.maxTouchPoints > 1;
+    const os = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone'
+      : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'HP Android' : 'Tablet Android') : /Windows/.test(ua) ? 'Laptop/PC Windows'
+      : /Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : 'Perangkat lain';
+    const br = /Edg\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /OPR\//.test(ua) ? 'Opera'
+      : /Firefox\//.test(ua) ? 'Firefox' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+    const app = matchMedia('(display-mode: standalone)').matches || navigator.standalone ? ' · aplikasi terpasang' : '';
+    return os + (br ? ' · ' + br : '') + app;
+  }
+  function startPresence(email) {
+    presence?.stop();
+    presMeta = { id: deviceId, email: email || '', role, device: deviceName(), tab: currentTab, since: new Date().toISOString() };
+    presence = DB.presence(presMeta, list => { onlineList = list; renderOnline(); }, st => { onlineState = st; renderOnline(); });
+  }
+  function renderOnline() {
+    if (!$('onlineTable')) return;
+    const list = [...onlineList].sort((a, b) => (a.email || '').localeCompare(b.email || '') || (a.since || '').localeCompare(b.since || ''));
+    const people = new Set(list.map(x => x.email)).size;
+    $('onlineCount').textContent = list.length ? `${people} orang · ${list.length} perangkat` : '';
+    const tabName = t => document.querySelector(`.tab[data-tab="${t}"]`)?.childNodes[0]?.textContent.trim() || (t === 'pengaturan' ? 'Pengaturan' : t || '-');
+    const ago = iso => { const m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
+      return m < 1 ? 'baru saja' : m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.floor(m / 60)} jam lalu` : `${Math.floor(m / 1440)} hari lalu`; };
+    const err = /ERROR|TIMED_OUT/.test(onlineState);
+    $('onlineTable').innerHTML = `<thead><tr><th>Akun</th><th>Perangkat</th><th>Sedang di</th><th>Sejak</th></tr></thead>
+      <tbody>${list.length ? list.map(x => `<tr${x.id === deviceId ? ' class="me"' : ''}>
+        <td><b>${esc((x.email || '').split('@')[0])}</b> <span class="muted">${esc(x.role === 'pemilik' ? 'Pemilik' : 'Kasir')}</span>${x.id === deviceId ? ' <span class="chip ok">Perangkat ini</span>' : ''}</td>
+        <td>${esc(x.device || '-')}</td><td>${esc(tabName(x.tab))}</td>
+        <td data-sort="${esc(x.since || '')}" title="${esc(new Date(x.since).toLocaleString('id-ID'))}">${esc(ago(x.since))}</td></tr>`).join('')
+      : `<tr><td class="empty" colspan="4">${err ? 'Daftar belum aktif. Tunggu pembaruan database otomatis (file 016) selesai, lalu tekan ↻.' : 'Memuat…'}</td></tr>`}</tbody>`;
+  }
+
   function startSync() {
     stopSync?.();
     stopSync = DB.subscribe(table => {
