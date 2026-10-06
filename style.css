@@ -942,3 +942,16 @@ label { color: #5a4a46; }
 .login-accounts .acc button { border: 0; background: none; box-shadow: none; min-height: 34px !important; padding: 0 6px 0 12px; font-weight: 600; color: var(--ink); cursor: pointer; }
 .login-accounts .acc button.x { padding: 0 10px 0 4px; color: var(--muted); font-size: 16px; }
 .login-accounts .acc button.x:hover { color: var(--bad); }
+
+/* Printer langsung */
+#printerBtn { position: relative; }
+.pdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c9bfb6; vertical-align: middle; }
+#printerBtn .pdot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; background: transparent; }
+.pdot.on, #printerBtn .pdot.on { background: #2f9e57; }
+.pdot.off, #printerBtn .pdot.off { background: #d08a1e; }
+.printer-sheet { max-width: 520px; }
+.pr-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #faf6f0; border: 1px solid var(--line); margin: 6px 0 10px; }
+.pr-status.ok { background: #eefaf2; border-color: #cdebd8; }
+.pr-connect { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
+.pr-opt { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-weight: 500; cursor: pointer; }
+.pr-opt input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--amoy); flex: none; }

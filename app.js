@@ -567,11 +567,77 @@
     `;
   }
 
-  async function doPrint() {
+  async function browserPrint() {
     const img = $('receipt').querySelector('img');
     if (img && !img.complete) await new Promise(r => { img.onload = img.onerror = r; });
     window.print();
   }
+  // Cetak: langsung ke printer (kalau disambungkan di 🖨) atau lewat jendela Print browser.
+  // Laci dibuka otomatis untuk nota baru yang dibayar tunai (kalau diaktifkan).
+  async function doPrint(openDrawer = false) {
+    if (!window.Printer?.direct) return browserPrint();
+    $('printBtn').disabled = true;
+    try { await Printer.printOrder(receiptOrder, STORE, { openDrawer }); toast(openDrawer ? 'Struk dicetak · laci dibuka' : 'Struk dicetak'); }
+    catch (e) { toast(e.message, true); }
+    finally { $('printBtn').disabled = false; }
+  }
+
+  // ---- Printer langsung (🖨) ----
+  const PR_WHY = { ble: 'Bluetooth (cara 1)', serial: 'Bluetooth (cara 2)', usb: 'Kabel USB' };
+  function renderPrinter() {
+    const P = window.Printer;
+    $('printerDot').className = 'pdot' + (P?.connected ? ' on' : P?.direct ? ' off' : '');
+    $('drawerBtn').hidden = !P?.direct;
+    if ($('printerModal').hidden || !P) return;
+    const st = P.settings;
+    $('printerBody').innerHTML = !P.support.any ? `
+      <p class="notice">Browser ini tidak bisa tersambung langsung ke printer (iPhone/iPad, Safari, atau Firefox).
+        Pakai <b>Chrome</b> di HP/tablet Android atau laptop. Di sini struk tetap bisa dicetak lewat jendela Print.</p>` : `
+      <div class="pr-status ${P.connected ? 'ok' : ''}">
+        <span class="pdot ${P.connected ? 'on' : P.direct ? 'off' : ''}"></span>
+        ${P.connected ? `Tersambung: <b>${esc(P.name)}</b>` : P.direct && st.name ? `Belum tersambung ke <b>${esc(st.name)}</b>. Nyalakan printer lalu sambungkan lagi.` : 'Belum ada printer yang tersambung.'}
+      </div>
+      <p class="muted hint">Nyalakan printer, lalu pilih cara sambung. Untuk iWare C-58BT coba <b>Bluetooth (cara 1)</b> dulu;
+        kalau printer tidak muncul di daftar, coba <b>Bluetooth (cara 2)</b> atau <b>Kabel USB</b>.
+        Di Android, Bluetooth &amp; Lokasi HP harus menyala.</p>
+      <div class="pr-connect">${['ble', 'serial', 'usb'].filter(k => P.support[k]).map(k =>
+        `<button class="${P.connected ? 'ghost' : 'primary'} small" data-prconnect="${k}">${PR_WHY[k]}</button>`).join('')}</div>
+      <label class="pr-opt"><input type="radio" name="prmode" value="direct" ${st.mode === 'direct' ? 'checked' : ''}><span>Cetak <b>langsung</b> ke printer ini (tanpa jendela Print)</span></label>
+      <label class="pr-opt"><input type="radio" name="prmode" value="browser" ${st.mode !== 'direct' ? 'checked' : ''}><span>Cetak lewat jendela Print browser</span></label>
+      <label class="pr-opt"><input type="checkbox" data-prset="drawer" ${st.drawer ? 'checked' : ''}><span>Buka laci uang otomatis saat menyimpan nota <b>tunai</b></span></label>
+      <label class="pr-opt"><input type="checkbox" data-prset="logo" ${st.logo ? 'checked' : ''}><span>Cetak logo di struk</span></label>
+      <div class="actions">
+        <button class="ghost small" data-prtest ${P.connected ? '' : 'disabled'}>Tes cetak</button>
+        <button class="ghost small" data-prdrawer ${P.connected ? '' : 'disabled'}>Buka laci</button>
+        ${P.connected ? '<button class="ghost small danger" data-prdisconnect>Putuskan</button>' : ''}
+      </div>
+      <p class="muted hint">Laci uang harus dicolok ke lubang <b>RJ11 (DK)</b> di belakang printer. Pengaturan ini tersimpan di perangkat ini saja.</p>`;
+  }
+  $('printerBtn').addEventListener('click', () => { $('printerModal').hidden = false; renderPrinter(); });
+  $('closePrinterBtn').addEventListener('click', () => { $('printerModal').hidden = true; });
+  $('printerModal').addEventListener('click', e => { if (e.target === $('printerModal')) $('printerModal').hidden = true; });
+  $('printerBody').addEventListener('change', e => {
+    if (e.target.name === 'prmode') Printer.set('mode', e.target.value);
+    if (e.target.dataset.prset) Printer.set(e.target.dataset.prset, e.target.checked);
+  });
+  $('printerBody').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    b.disabled = true;
+    try {
+      if (b.dataset.prconnect) { await Printer.connect(b.dataset.prconnect); toast('Printer tersambung: ' + Printer.name); }
+      if ('prtest' in b.dataset) { await Printer.test(STORE); toast('Tes cetak dikirim'); }
+      if ('prdrawer' in b.dataset) { await Printer.openDrawer(); toast('Perintah buka laci dikirim'); }
+      if ('prdisconnect' in b.dataset) { await Printer.disconnect(); toast('Printer diputuskan'); }
+    } catch (err) {
+      if (err?.name === 'NotFoundError') toast('Tidak ada printer yang dipilih', true);
+      else if (err?.name === 'SecurityError' || err?.name === 'NotAllowedError') toast('Izin ditolak browser. Coba lagi dan izinkan akses printer.', true);
+      else toast(err?.message || String(err), true);
+    } finally { b.disabled = false; renderPrinter(); }
+  });
+  $('drawerBtn').addEventListener('click', async () => {
+    try { await Printer.openDrawer(); toast('Laci dibuka'); } catch (e) { toast(e.message, true); }
+  });
+  if (window.Printer) { Printer.onChange(renderPrinter); renderPrinter(); if (Printer.direct) Printer.reconnect(); }
   // ---- Nota ke WhatsApp sebagai teks ----
   // Chat pembeli dibuka dengan isi nota sudah terketik; kasir tinggal tekan Enter.
   //  - Laptop: WhatsApp Web. Situs lain tidak bisa mengarahkan ke tab WhatsApp Web yang sudah terbuka
@@ -627,12 +693,12 @@
     $('receipt').innerHTML = receiptHtml(order);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
-    if (autoPrint) doPrint();
+    if (autoPrint) doPrint(!!window.Printer?.direct && Printer.settings.drawer && order.pay_method === 'tunai' && order.status !== 'batal');
   }
-  $('printBtn').addEventListener('click', doPrint);
+  $('printBtn').addEventListener('click', () => doPrint(false));
   $('closeReceiptBtn').addEventListener('click', () => ($('receiptModal').hidden = true));
   $('receiptModal').addEventListener('click', e => { if (e.target === $('receiptModal')) $('receiptModal').hidden = true; });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('receiptModal').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('receiptModal').hidden = true; $('printerModal').hidden = true; } });
 
   // ---------------------------------------------------------------- Orders
   const orderCache = new Map();

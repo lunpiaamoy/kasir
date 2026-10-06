@@ -74,6 +74,15 @@ Lalu buat akun loginnya di **Authentication → Users** seperti langkah 5. Untuk
 update public.staff set role = 'pemilik' where email = 'email-pegawai@gmail.com';
 ```
 
+## Printer struk langsung & laci uang
+
+Tombol **🖨** di bilah atas menyambungkan aplikasi langsung ke printer thermal 58 mm (ESC/POS, mis. iWare C-58BT), tanpa jendela Print:
+
+- **Bluetooth (cara 1)**: Bluetooth BLE. **Bluetooth (cara 2)**: Bluetooth klasik / port COM. **Kabel USB**.
+- Hanya di **Chrome/Edge** (Android atau laptop). Safari (iPhone/iPad) dan Firefox tetap memakai jendela Print.
+- Pilihan **Buka laci uang otomatis saat menyimpan nota tunai**: laci dicolok ke port RJ11 (DK) printer dan dibuka dengan perintah ESC/POS. Ada juga tombol **Buka laci** dan **Tes cetak**.
+- Pengaturan printer tersimpan per perangkat.
+
 ## Memasang di layar utama
 
 Aplikasi bisa dipasang seperti aplikasi biasa, tanpa bilah alamat browser:
