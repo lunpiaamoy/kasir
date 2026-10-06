@@ -955,3 +955,7 @@ label { color: #5a4a46; }
 .pr-connect { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
 .pr-opt { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; font-weight: 500; cursor: pointer; }
 .pr-opt input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--amoy); flex: none; }
+
+.pr-kick { margin: 10px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; background: #fffaf3; }
+.pr-kick summary { cursor: pointer; font-weight: 700; color: var(--amoy); }
+.pr-kick button.on { border-color: var(--amoy); background: var(--amoy-tint); }
