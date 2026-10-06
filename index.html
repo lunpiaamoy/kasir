@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=73">
+<link rel="stylesheet" href="style.css?v=76">
 </head>
 <body>
 
@@ -255,7 +255,8 @@
     <section class="panel owner-only">
       <div class="view-head"><h3>Catatan aktivitas</h3>
         <div class="seg compact" id="logSeg">
-          <button type="button" data-days="7" aria-checked="true">7 hari</button>
+          <button type="button" data-days="0" aria-checked="true">Hari ini</button>
+          <button type="button" data-days="7" aria-checked="false">7 hari</button>
           <button type="button" data-days="30" aria-checked="false">30 hari</button>
           <button type="button" data-days="365" aria-checked="false">1 tahun</button>
         </div></div>
@@ -422,10 +423,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=73"></script>
-<script src="db.js?v=73"></script>
-<script src="printer.js?v=73"></script>
-<script src="app.js?v=73"></script>
+<script src="config.js?v=76"></script>
+<script src="db.js?v=76"></script>
+<script src="printer.js?v=76"></script>
+<script src="app.js?v=76"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

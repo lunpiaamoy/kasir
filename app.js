@@ -611,7 +611,18 @@
         <button class="ghost small" data-prdrawer ${P.connected ? '' : 'disabled'}>Buka laci</button>
         ${P.connected ? '<button class="ghost small danger" data-prdisconnect>Putuskan</button>' : ''}
       </div>
-      <p class="muted hint">Laci uang harus dicolok ke lubang <b>RJ11 (DK)</b> di belakang printer. Pengaturan ini tersimpan di perangkat ini saja.</p>`;
+      <details class="pr-kick" ${P.connected ? 'open' : ''}>
+        <summary>Laci tidak terbuka? Coba cara lain</summary>
+        <p class="muted hint">Klik satu per satu. Cara yang membuat laci terbuka akan dipakai seterusnya.
+          Sekarang dipakai: <b>${esc(P.KICK_NAMES[st.kick] || P.KICK_NAMES.auto)}</b>.</p>
+        <div class="pr-connect">${['a', 'b', 'c', 'd'].map(k => `<button class="ghost small${st.kick === k ? ' on' : ''}" data-prkick="${k}" ${P.connected ? '' : 'disabled'}>${esc(P.KICK_NAMES[k])}</button>`).join('')}
+          <button class="ghost small${st.kick === 'auto' ? ' on' : ''}" data-prkick="auto" ${P.connected ? '' : 'disabled'}>Otomatis</button></div>
+        <p class="muted hint">Kalau semua cara tidak membuka laci:
+          (1) pastikan kabel laci dicolok ke lubang <b>RJ11/DK</b> printer (bukan ke HP/laptop);
+          (2) kunci laci di posisi <b>terbuka/otomatis</b>, bukan terkunci;
+          (3) laci harus jenis yang dibuka printer (tertulis <b>12 V/24 V, RJ11</b>). Printer kecil kadang tidak kuat membuka laci 24 V.</p>
+      </details>
+      <p class="muted hint">Pengaturan ini tersimpan di perangkat ini saja.</p>`;
   }
   $('printerBtn').addEventListener('click', () => { $('printerModal').hidden = false; renderPrinter(); });
   $('closePrinterBtn').addEventListener('click', () => { $('printerModal').hidden = true; });
@@ -627,6 +638,7 @@
       if (b.dataset.prconnect) { await Printer.connect(b.dataset.prconnect); toast('Printer tersambung: ' + Printer.name); }
       if ('prtest' in b.dataset) { await Printer.test(STORE); toast('Tes cetak dikirim'); }
       if ('prdrawer' in b.dataset) { await Printer.openDrawer(); toast('Perintah buka laci dikirim'); }
+      if (b.dataset.prkick) { Printer.set('kick', b.dataset.prkick); await Printer.openDrawer(b.dataset.prkick); toast(`${Printer.KICK_NAMES[b.dataset.prkick]} dikirim. Kalau laci terbuka, cara ini dipakai seterusnya.`); }
       if ('prdisconnect' in b.dataset) { await Printer.disconnect(); toast('Printer diputuskan'); }
     } catch (err) {
       if (err?.name === 'NotFoundError') toast('Tidak ada printer yang dipilih', true);
@@ -2010,7 +2022,7 @@
   function renderSettings() { renderStaff(); renderLog(); renderOnline(); }
 
   // ---- Catatan aktivitas (pemilik)
-  let logDays = 7;
+  let logDays = 0;   // 0 = hari ini (sejak pukul 00.00)
   $('logSeg').addEventListener('click', e => {
     const b = e.target.closest('[data-days]'); if (!b) return;
     logDays = Number(b.dataset.days); setSeg($('logSeg'), b.dataset.days); renderLog();
@@ -2038,7 +2050,8 @@
   }
   async function renderLog() {
     let list;
-    try { list = await DB.listActivity(new Date(Date.now() - logDays * 864e5).toISOString()); }
+    const since = logDays ? new Date(Date.now() - logDays * 864e5) : new Date(new Date().setHours(0, 0, 0, 0));
+    try { list = await DB.listActivity(since.toISOString()); }
     catch (e) { $('logTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
     $('logTable').innerHTML = `<thead><tr><th>Waktu</th><th>Oleh</th><th>Kegiatan</th><th>Keterangan</th></tr></thead><tbody>
       ${list.length ? list.map(x => { const t = new Date(x.at), [what, info] = logText(x); return `<tr class="log-${esc(x.action)}">

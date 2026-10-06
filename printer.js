@@ -17,7 +17,16 @@
     'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '49535343-fe7d-4ae5-8fa9-9fafd205e455',
   ];
 
-  const load = () => { try { return { mode: 'browser', drawer: true, logo: true, ...JSON.parse(localStorage.getItem(SET_KEY) || '{}') }; } catch { return { mode: 'browser', drawer: true, logo: true }; } };
+  const DEF = { mode: 'browser', drawer: true, logo: true, kick: 'auto' };
+  const load = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(SET_KEY) || '{}') }; } catch { return { ...DEF }; } };
+  // Sinyal buka laci. Tiap printer/laci bisa butuh cara berbeda; 'auto' mengirim beberapa sekaligus.
+  const KICKS = {
+    a: [0x1b, 0x70, 0x00, 0x19, 0xfa],                     // ESC p, pin 2, pulsa 50 ms (standar)
+    b: [0x1b, 0x70, 0x01, 0x19, 0xfa],                     // ESC p, pin 5
+    c: [0x1b, 0x70, 0x00, 0x64, 0xfa, 0x1b, 0x70, 0x01, 0x64, 0xfa],  // pulsa panjang 200 ms (laci 12/24 V)
+    d: [0x10, 0x14, 0x01, 0x00, 0x05, 0x10, 0x14, 0x01, 0x01, 0x05],  // DLE DC4 (perintah real-time)
+  };
+  const kickBytes = k => k === 'auto' || !KICKS[k] ? [...KICKS.a, ...KICKS.b, ...KICKS.c] : KICKS[k];
   let settings = load();
   const save = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch {} };
 
@@ -154,7 +163,7 @@
       flush(); return this;
     }
     feed(n = 1) { return this.raw(ESC, 0x64, n); }
-    drawer() { return this.raw(ESC, 0x70, 0x00, 0x19, 0xfa, ESC, 0x70, 0x01, 0x19, 0xfa); }  // pin 2 & pin 5
+    drawer(kind = settings.kick) { return this.raw(kickBytes(kind)); }
     cut() { return this.raw(GS, 0x56, 0x42, 0x00); }
     image(bits) { if (bits) this.raw(bits); return this; }
     bytes() { return new Uint8Array(this.b); }
@@ -247,7 +256,8 @@
       const logo = settings.logo ? await loadLogo() : false;
       await send(receipt(o, store, { logo, drawer: openDrawer }));
     },
-    async openDrawer() { await send(new Doc().drawer().bytes()); },
+    async openDrawer(kind) { await send(new Doc().drawer(kind).bytes()); },
+    KICK_NAMES: { auto: 'Otomatis (cara 1–3 sekaligus)', a: 'Cara 1 · standar', b: 'Cara 2 · pin 5', c: 'Cara 3 · sinyal panjang', d: 'Cara 4 · perintah langsung' },
     async test(store) { await send(testPage(store, settings.logo ? await loadLogo() : false)); },
     // untuk pengujian
     _receipt: receipt, _Doc: Doc,
