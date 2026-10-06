@@ -584,6 +584,33 @@
 
   // ---- Printer langsung (🖨) ----
   const PR_WHY = { ble: 'Bluetooth (cara 1)', serial: 'Bluetooth (cara 2)', usb: 'Kabel USB' };
+  let prError = null;
+  const isAndroid = /Android/i.test(navigator.userAgent), isWindows = /Windows/i.test(navigator.userAgent);
+  // Penjelasan & langkah perbaikan kalau sambungan printer gagal (pesan asli browser ikut ditampilkan)
+  function printerHelp(e) {
+    const denied = /SecurityError|NotAllowedError/.test(e.name) || /denied|not allowed|permission|izin/i.test(e.message);
+    const steps = [];
+    if (e.how === 'usb' && isWindows && (denied || /access/i.test(e.message)))
+      steps.push('Di laptop Windows, kabel USB dipakai oleh driver printer Windows sehingga browser tidak diizinkan memakainya.',
+        'Pakai <b>Bluetooth (cara 2)</b>: sambungkan dulu printer di <b>Pengaturan Windows → Bluetooth &amp; perangkat → Tambah perangkat</b> (PIN biasanya <b>0000</b> atau <b>1234</b>), lalu di sini klik Bluetooth (cara 2) dan pilih printernya.');
+    else if (denied && isAndroid)
+      steps.push('Buka <b>Setelan HP → Aplikasi → Chrome → Izin</b>, lalu izinkan <b>Perangkat di sekitar</b> (Nearby devices) dan <b>Lokasi</b>.',
+        'Nyalakan <b>Bluetooth</b> dan <b>Lokasi/GPS</b> HP.',
+        'Di Chrome, ketuk ikon di kiri alamat <b>lunpiaamoy.github.io</b> → <b>Izin/Setelan situs</b> → pastikan <b>Bluetooth</b> dan <b>Perangkat USB</b> tidak diblokir (pilih <b>Tanya</b>/<b>Izinkan</b>), lalu muat ulang halaman.',
+        'Kalau dibuka dari ikon di layar utama dan tetap gagal, coba buka lewat aplikasi <b>Chrome</b> langsung.',
+        'Tutup aplikasi lain yang sedang tersambung ke printer (mis. aplikasi printer iWare), lalu coba lagi.');
+    else if (denied)
+      steps.push('Klik ikon di kiri alamat situs → <b>Setelan situs</b> → izinkan <b>Bluetooth</b>/<b>Perangkat USB</b>/<b>Port serial</b>, lalu muat ulang halaman.',
+        'Pastikan Bluetooth laptop menyala dan printer tidak sedang dipakai aplikasi lain.');
+    else if (e.name === 'NotFoundError')
+      steps.push('Printer tidak terlihat. Pastikan printer menyala dan dekat. Coba cara sambung yang lain.');
+    else if (/GATT|connect|network/i.test(e.name + e.message))
+      steps.push('Printer terlihat tapi tidak mau tersambung. Matikan lalu nyalakan printer, tutup aplikasi lain yang memakai printer, lalu coba lagi.');
+    else steps.push('Coba cara sambung yang lain, atau matikan-nyalakan printer lalu coba lagi.');
+    return `<div class="pr-error"><b>Belum bisa tersambung (${esc(PR_WHY[e.how] || 'printer')}).</b>
+      <ol>${steps.map(x => `<li>${x}</li>`).join('')}</ol>
+      <small>Pesan browser: ${esc(e.name)} — ${esc(e.message)}</small></div>`;
+  }
   function renderPrinter() {
     const P = window.Printer;
     $('printerDot').className = 'pdot' + (P?.connected ? ' on' : P?.direct ? ' off' : '');
@@ -600,6 +627,7 @@
       <p class="muted hint">Nyalakan printer, lalu pilih cara sambung. Untuk iWare C-58BT coba <b>Bluetooth (cara 1)</b> dulu;
         kalau printer tidak muncul di daftar, coba <b>Bluetooth (cara 2)</b> atau <b>Kabel USB</b>.
         Di Android, Bluetooth &amp; Lokasi HP harus menyala.</p>
+      ${prError ? printerHelp(prError) : ''}
       <div class="pr-connect">${['ble', 'serial', 'usb'].filter(k => P.support[k]).map(k =>
         `<button class="${P.connected ? 'ghost' : 'primary'} small" data-prconnect="${k}">${PR_WHY[k]}</button>`).join('')}</div>
       <label class="pr-opt"><input type="radio" name="prmode" value="direct" ${st.mode === 'direct' ? 'checked' : ''}><span>Cetak <b>langsung</b> ke printer ini (tanpa jendela Print)</span></label>
@@ -635,15 +663,14 @@
     const b = e.target.closest('button'); if (!b) return;
     b.disabled = true;
     try {
-      if (b.dataset.prconnect) { await Printer.connect(b.dataset.prconnect); toast('Printer tersambung: ' + Printer.name); }
+      if (b.dataset.prconnect) { await Printer.connect(b.dataset.prconnect); prError = null; toast('Printer tersambung: ' + Printer.name); }
       if ('prtest' in b.dataset) { await Printer.test(STORE); toast('Tes cetak dikirim'); }
       if ('prdrawer' in b.dataset) { await Printer.openDrawer(); toast('Perintah buka laci dikirim'); }
       if (b.dataset.prkick) { Printer.set('kick', b.dataset.prkick); await Printer.openDrawer(b.dataset.prkick); toast(`${Printer.KICK_NAMES[b.dataset.prkick]} dikirim. Kalau laci terbuka, cara ini dipakai seterusnya.`); }
       if ('prdisconnect' in b.dataset) { await Printer.disconnect(); toast('Printer diputuskan'); }
     } catch (err) {
-      if (err?.name === 'NotFoundError') toast('Tidak ada printer yang dipilih', true);
-      else if (err?.name === 'SecurityError' || err?.name === 'NotAllowedError') toast('Izin ditolak browser. Coba lagi dan izinkan akses printer.', true);
-      else toast(err?.message || String(err), true);
+      prError = { how: b.dataset.prconnect || '', name: err?.name || 'Error', message: err?.message || String(err) };
+      toast(prError.name === 'NotFoundError' && /cancel|chooser|no device|No port|selected/i.test(prError.message) ? 'Tidak ada printer yang dipilih' : 'Printer belum bisa tersambung. Lihat penjelasan di jendela printer.', true);
     } finally { b.disabled = false; renderPrinter(); }
   });
   $('drawerBtn').addEventListener('click', async () => {

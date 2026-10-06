@@ -959,3 +959,8 @@ label { color: #5a4a46; }
 .pr-kick { margin: 10px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; background: #fffaf3; }
 .pr-kick summary { cursor: pointer; font-weight: 700; color: var(--amoy); }
 .pr-kick button.on { border-color: var(--amoy); background: var(--amoy-tint); }
+
+.pr-error { margin: 8px 0 12px; padding: 10px 12px; border-radius: 12px; background: #fdf0ee; border: 1px solid #f3cfcb; color: #5a1a14; font-size: 14px; }
+.pr-error ol { margin: 6px 0 6px 18px; padding: 0; }
+.pr-error li { margin: 3px 0; }
+.pr-error small { color: #8a5a54; word-break: break-word; }
