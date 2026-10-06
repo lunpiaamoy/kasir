@@ -2019,7 +2019,19 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  function renderSettings() { renderStaff(); renderLog(); renderOnline(); }
+  // Catatan aktivitas bisa disembunyikan (pilihan diingat di perangkat ini); data baru dimuat saat dibuka
+  const logOpen = () => { try { return localStorage.getItem('lunpiaLogOpen') === '1'; } catch { return false; } };
+  function applyLogOpen() {
+    const open = logOpen();
+    $('logBody').hidden = !open;
+    $('logToggle').textContent = open ? 'Sembunyikan' : 'Tampilkan';
+    $('logToggle').setAttribute('aria-expanded', String(open));
+  }
+  $('logToggle').addEventListener('click', () => {
+    try { localStorage.setItem('lunpiaLogOpen', logOpen() ? '0' : '1'); } catch {}
+    applyLogOpen(); if (logOpen()) renderLog();
+  });
+  function renderSettings() { renderStaff(); applyLogOpen(); if (logOpen()) renderLog(); renderOnline(); }
 
   // ---- Catatan aktivitas (pemilik)
   let logDays = 7;
