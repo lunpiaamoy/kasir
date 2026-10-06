@@ -2019,22 +2019,10 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
-  // Catatan aktivitas bisa disembunyikan (pilihan diingat di perangkat ini); data baru dimuat saat dibuka
-  const logOpen = () => { try { return localStorage.getItem('lunpiaLogOpen') === '1'; } catch { return false; } };
-  function applyLogOpen() {
-    const open = logOpen();
-    $('logBody').hidden = !open;
-    $('logToggle').textContent = open ? 'Sembunyikan' : 'Tampilkan';
-    $('logToggle').setAttribute('aria-expanded', String(open));
-  }
-  $('logToggle').addEventListener('click', () => {
-    try { localStorage.setItem('lunpiaLogOpen', logOpen() ? '0' : '1'); } catch {}
-    applyLogOpen(); if (logOpen()) renderLog();
-  });
-  function renderSettings() { renderStaff(); applyLogOpen(); if (logOpen()) renderLog(); renderOnline(); }
+  function renderSettings() { renderStaff(); renderLog(); renderOnline(); }
 
   // ---- Catatan aktivitas (pemilik)
-  let logDays = 7;
+  let logDays = 0;   // 0 = hari ini (sejak pukul 00.00)
   $('logSeg').addEventListener('click', e => {
     const b = e.target.closest('[data-days]'); if (!b) return;
     logDays = Number(b.dataset.days); setSeg($('logSeg'), b.dataset.days); renderLog();
@@ -2062,7 +2050,8 @@
   }
   async function renderLog() {
     let list;
-    try { list = await DB.listActivity(new Date(Date.now() - logDays * 864e5).toISOString()); }
+    const since = logDays ? new Date(Date.now() - logDays * 864e5) : new Date(new Date().setHours(0, 0, 0, 0));
+    try { list = await DB.listActivity(since.toISOString()); }
     catch (e) { $('logTable').innerHTML = `<tbody><tr><td class="error">${esc(e.message)}</td></tr></tbody>`; return; }
     $('logTable').innerHTML = `<thead><tr><th>Waktu</th><th>Oleh</th><th>Kegiatan</th><th>Keterangan</th></tr></thead><tbody>
       ${list.length ? list.map(x => { const t = new Date(x.at), [what, info] = logText(x); return `<tr class="log-${esc(x.action)}">

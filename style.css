@@ -959,4 +959,3 @@ label { color: #5a4a46; }
 .pr-kick { margin: 10px 0 4px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; background: #fffaf3; }
 .pr-kick summary { cursor: pointer; font-weight: 700; color: var(--amoy); }
 .pr-kick button.on { border-color: var(--amoy); background: var(--amoy-tint); }
-#logBody #logSeg { margin: 0 0 8px; }
