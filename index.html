@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=77">
+<link rel="stylesheet" href="style.css?v=78">
 </head>
 <body>
 
@@ -103,13 +103,13 @@
 
         <div class="cart-total"><span>Total</span><b id="cartTotal">0</b></div>
 
-        <fieldset class="field-group">
-          <legend>Pembeli</legend>
+        <details class="field-group cust-box" id="custBox">
+          <summary><span class="cust-legend">Pembeli</span> <span class="muted cust-sum" id="custSum">(opsional) nama &amp; WA</span></summary>
           <div class="row2">
             <div><label for="custName">Nama</label><input id="custName" autocomplete="off"></div>
             <div><label for="custWa">WA</label><input id="custWa" inputmode="tel" autocomplete="off"></div>
           </div>
-        </fieldset>
+        </details>
 
         <fieldset class="field-group">
           <legend>Diambil kapan?</legend>
@@ -423,10 +423,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=77"></script>
-<script src="db.js?v=77"></script>
-<script src="printer.js?v=77"></script>
-<script src="app.js?v=77"></script>
+<script src="config.js?v=78"></script>
+<script src="db.js?v=78"></script>
+<script src="printer.js?v=78"></script>
+<script src="app.js?v=78"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

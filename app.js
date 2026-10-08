@@ -303,8 +303,16 @@
     const b = e.target.closest('[data-add]'); if (!b) return;
     const id = Number(b.dataset.add);
     cart.set(id, (cart.get(id) || 0) + 1);
+    warnStock(id);
     renderCatalog(); renderCart();
   });
+  // Peringatan (tidak memblokir) kalau jumlah di keranjang melebihi stok di toko
+  const warnedStock = new Set();
+  function warnStock(id) {
+    const p = byId(id); if (!p || editing) return;
+    const q = cart.get(id) || 0, have = tokoOf(p);
+    if (q > have && !warnedStock.has(id)) { warnedStock.add(id); toast(`Stok ${p.category} ${p.name} di toko tinggal ${Math.max(have, 0)}${homeOf(p) ? ` (di rumah ${homeOf(p)})` : ''}`, true); }
+  }
 
   // ---------------------------------------------------------------- Cart
   const byId = id => products.find(p => p.id === id);
@@ -314,6 +322,7 @@
   const cartTotal = () => [...cart].reduce((s, [id, q]) => s + priceOf(id) * q, 0);
 
   function renderCart() {
+    syncCustBox();
     for (const id of [...cart.keys()]) if (!byId(id)) cart.delete(id);
     if (!cart.size) {
       $('cartItems').innerHTML = `<div class="cart-empty">Ketuk produk untuk menambahkan ke pesanan.</div>`;
@@ -347,7 +356,7 @@
   $('cartJump').addEventListener('click', () => document.querySelector('.cart').scrollIntoView({ behavior: 'smooth', block: 'start' }));
   $('cartItems').addEventListener('click', e => {
     const inc = e.target.closest('[data-inc]'), dec = e.target.closest('[data-dec]');
-    if (inc) { const id = Number(inc.dataset.inc); cart.set(id, cart.get(id) + 1); }
+    if (inc) { const id = Number(inc.dataset.inc); cart.set(id, cart.get(id) + 1); warnStock(id); }
     else if (dec) { const id = Number(dec.dataset.dec); const q = cart.get(id) - 1; q > 0 ? cart.set(id, q) : cart.delete(id); }
     else return;
     renderCatalog(); renderCart();
@@ -431,8 +440,16 @@
   }
   ['ongkir', 'paid'].forEach(id => $(id).addEventListener('blur', () => { const v = toInt($(id).value); $(id).value = v ? rp(v) : ''; }));
 
+  // Bagian Pembeli dilipat untuk jual langsung; terbuka otomatis untuk ambil/kirim atau kalau sudah diisi
+  function syncCustBox() {
+    const name = $('custName').value.trim(), wa = $('custWa').value.trim();
+    if (segValue($('fulfillSeg')) !== 'langsung' || name || wa) $('custBox').open = true;
+    $('custSum').textContent = name || wa ? [name, wa].filter(Boolean).join(' · ') : '(opsional) nama & WA';
+  }
+  ['custName', 'custWa'].forEach(id => $(id).addEventListener('input', syncCustBox));
   function setFulfill(v) {
     setSeg($('fulfillSeg'), v);
+    if (v !== 'langsung') $('custBox').open = true;
     $('fulfillFields').hidden = v === 'langsung';
     $('ongkirField').hidden = v !== 'kirim';
   }
@@ -442,6 +459,7 @@
     cart.clear(); editing = null;
     ['custName', 'custWa', 'custAddress', 'orderNote', 'fDate', 'fTime', 'ongkir', 'paid'].forEach(id => ($(id).value = ''));
     setFulfill('langsung'); setPay('tunai');
+    $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
     $('cartTitle').textContent = 'Pesanan baru'; $('editBanner').hidden = true;
     $('saveBtn').textContent = 'Simpan & cetak struk';
@@ -564,6 +582,7 @@
       ${fulRows}
       ${o.note ? `<div class="r-gap"></div>${kv([['CATATAN', esc(o.note)]])}` : ''}
       ${o.status === 'batal' ? '<div class="r-gap"></div><div class="r-c"><b>*** DIBATALKAN ***</b></div>' : ''}
+      <div class="r-gap"></div><div class="r-c r-thanks">Terima kasih</div>
     `;
   }
 
@@ -1881,11 +1900,30 @@
         : `<b>Cadangan data terakhir ${days} hari lalu.</b>`} Simpan cadangan seminggu sekali supaya data aman.
         <button class="link" data-backup-now>Unduh cadangan sekarang</button></div>`);
     }
-    $('kasirNotices').innerHTML = items.join('');
+    // Pengingat catat produksi: laba di Laporan hanya akurat kalau pembelian & produksi dicatat
+    if (can('pembelian_catat')) {
+      const from = ymdLocal(new Date(Date.now() - 7 * 864e5));
+      const prods = await DB.listProductions(from, today).catch(() => null);
+      if (prods && !prods.length) items.push(`<div class="notice" data-key="prod">Belum ada catatan <b>produksi</b> 7 hari terakhir. Catat supaya stok &amp; laba akurat. <button class="link" data-goto="pembelian">Catat</button></div>`);
+    }
+    // Pemberitahuan bisa ditutup (×) untuk hari ini, kecuali yang penting (merah)
+    const closed = (() => { try { return JSON.parse(localStorage.getItem('lunpiaNoticeClosed') || '{}'); } catch { return {}; } })();
+    $('kasirNotices').innerHTML = items.map(h => {
+      const key = (h.match(/data-key="([^"]+)"/) || [])[1] || (h.match(/data-(goto|backup-now)="?([a-z]*)/) || []).slice(1).join(':');
+      if (/notice bad/.test(h)) return h;
+      if (closed[key] === today) return '';
+      return h.replace(/<\/div>$/, ` <button class="notice-x" data-close-notice="${key}" aria-label="Tutup pemberitahuan" title="Tutup untuk hari ini">×</button></div>`);
+    }).join('');
   }
   $('kasirNotices').addEventListener('click', e => {
     const b = e.target.closest('[data-goto]'); if (b) openTab(b.dataset.goto);
     if (e.target.closest('[data-backup-now]')) downloadBackup();
+    const x = e.target.closest('[data-close-notice]');
+    if (x) {
+      try { const c = JSON.parse(localStorage.getItem('lunpiaNoticeClosed') || '{}'); c[x.dataset.closeNotice] = ymdLocal(new Date());
+        localStorage.setItem('lunpiaNoticeClosed', JSON.stringify(c)); } catch {}
+      x.closest('.notice').remove();
+    }
   });
 
   // ---------------------------------------------------------------- Export
