@@ -179,8 +179,11 @@
             .gte('at', fromIso).lt('at', toIso).order('at'));
         } catch { return null; }
       },
-      async listOrders(fromIso, toIso) {
-        return withPay(() => all(() => sb.from('orders').select(ORDER_SEL())
+      // lean: hanya kolom untuk Laporan (lebih ringan dibanding seluruh isi nota)
+      async listOrders(fromIso, toIso, lean = false) {
+        const sel = () => lean ? 'id, created_at, total, status, pay_method, ongkir, order_items(category, name, qty, subtotal)'
+          + (hasPayments ? ', order_payments(amount, method, at)' : '') : ORDER_SEL();
+        return withPay(() => all(() => sb.from('orders').select(sel())
           .gte('created_at', fromIso).lt('created_at', toIso)
           .order('created_at', { ascending: false }).order('id', { ascending: false })));
       },
@@ -208,6 +211,16 @@
       // Semua pembeli yang pernah dicatat (untuk daftar kontak)
       async listCustomers() {
         return all(() => sb.from('orders').select('*').order('id'));   // '*': tetap jalan walau kolom address (005) belum ada
+      },
+      // Ringkasan kontak dihitung di database (020); null = belum diperbarui → app menghitung sendiri
+      async contactSummary() {
+        const rows = [];
+        for (let i = 0; ; i += 1000) {
+          const { data, error } = await sb.rpc('contact_summary').order('key').range(i, i + 999);
+          if (error && ['PGRST202', '42883'].includes(error.code)) return null;
+          fail(error); rows.push(...data);
+          if (data.length < 1000) return rows;
+        }
       },
       async markDone(id) {
         const { error } = await sb.rpc('mark_done', { p_id: id });
@@ -633,6 +646,7 @@
       async listCustomers() {
         return clone(load().orders).map(({ order_items, ...o }) => o);
       },
+      async contactSummary() { return null; },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id, reason = '') {
         const db = load(); const o = db.orders.find(x => x.id === id);

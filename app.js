@@ -1023,10 +1023,17 @@
   // Satu kontak per nomor WA (atau per nama kalau tanpa nomor); nama yang dipakai = nama terakhir.
   let contacts = [];
   async function renderContacts() {
-    let rows, hidden;
-    try { [rows, hidden] = await Promise.all([DB.listCustomers(), DB.listHiddenContacts()]); } catch (e) { toast(e.message, true); return; }
+    let rows, hidden, summary;
+    try {
+      [summary, hidden] = await Promise.all([DB.contactSummary(), DB.listHiddenContacts()]);
+      if (!summary) rows = await DB.listCustomers();   // database lama: hitung dari semua transaksi
+    } catch (e) { toast(e.message, true); return; }
     const hiddenAt = new Map(hidden.map(h => [h.key, new Date(h.hidden_at)]));
     const map = new Map();
+    // Dari database sudah satu baris per nomor WA
+    (summary || []).forEach(r => map.set(r.key, { key: r.key, name: r.name || '', wa: r.wa || '', address: r.address || '',
+      n: Number(r.n), spent: Number(r.spent), last: new Date(r.last).toISOString() }));
+    rows = rows || [];
     // Hanya pembeli yang punya nomor WA yang masuk kontak
     rows.filter(o => waNumber(o.customer_wa)).forEach(o => {
       const key = waNumber(o.customer_wa);
@@ -1385,9 +1392,8 @@
     const [from, to] = range;
     $('rFrom').value = ymdLocal(from); $('rTo').value = ymdLocal(new Date(+to - 864e5));
     let orders;
-    try { orders = await DB.listOrders(from.toISOString(), to.toISOString()); }
+    try { orders = await DB.listOrders(from.toISOString(), to.toISOString(), true); }
     catch (e) { toast(e.message, true); return; }
-    reportOrders = orders;
     const valid = orders.filter(o => o.status !== 'batal');
     const sum = (list, f) => list.reduce((s, o) => s + f(o), 0);
     const total = sum(valid, o => o.total);
@@ -2051,6 +2057,20 @@
         : `<b>Cadangan data terakhir ${days} hari lalu.</b>`} Simpan cadangan seminggu sekali supaya data aman.
         <button class="link" data-backup-now>Unduh cadangan sekarang</button></div>`);
     }
+    // Pantauan pemilik: kejadian sensitif hari ini & selisih kas kemarin
+    if (isOwner()) {
+      const start = new Date(); start.setHours(0, 0, 0, 0);
+      const yest = ymdLocal(new Date(+start - 864e5));
+      const [log, ycd] = await Promise.all([DB.listActivity(start.toISOString()).catch(() => null), DB.getCashDay(yest).catch(() => undefined)]);
+      const WATCH = { hapus_nota: 'nota dihapus', batal_nota: 'nota dibatalkan', ubah_nota: 'nota diubah', buka_laci: 'laci dibuka tanpa transaksi' };
+      const cnt = {}; (log || []).forEach(x => { if (WATCH[x.action]) cnt[x.action] = (cnt[x.action] || 0) + 1; });
+      const parts = Object.keys(WATCH).filter(k => cnt[k]).map(k => `${cnt[k]} ${WATCH[k]}`);
+      if (parts.length) items.push(`<div class="notice warn" data-key="pantau-${Object.values(cnt).reduce((a, b) => a + b, 0)}"><b>Hari ini:</b> ${parts.join(' · ')}. <button class="link" data-goto="pengaturan">Lihat catatan</button></div>`);
+      if (ycd && ycd.closed_at && ycd.counted != null && ycd.expected != null && ycd.counted !== ycd.expected)
+        items.push(`<div class="notice warn" data-key="selisih"><b>Kas kemarin ${ycd.counted < ycd.expected ? 'kurang' : 'lebih'} Rp ${rp(Math.abs(ycd.counted - ycd.expected))}</b>${ycd.note ? ' · ' + esc(ycd.note) : ''}. <button class="link" data-goto="kas">Lihat</button></div>`);
+      else if (ycd && !ycd.closed_at)
+        items.push(`<div class="notice warn" data-key="belumtutup">Kas kemarin <b>belum ditutup</b> (uang belum dihitung). <button class="link" data-goto="kas">Lihat</button></div>`);
+    }
     // Pengingat catat produksi: laba di Laporan hanya akurat kalau pembelian & produksi dicatat
     if (can('pembelian_catat')) {
       const from = ymdLocal(new Date(Date.now() - 7 * 864e5));
@@ -2080,9 +2100,10 @@
   // ---------------------------------------------------------------- Export
   // CSV dengan pemisah titik koma + BOM supaya langsung rapi dibuka di Excel berbahasa Indonesia.
   // Satu baris per produk dalam nota; transaksi batal ikut dengan status "batal".
-  let reportOrders = [];
-  $('exportBtn').addEventListener('click', () => {
+  $('exportBtn').addEventListener('click', async () => {
     const [from, to] = range;
+    let reportOrders;   // isi nota lengkap baru diambil saat diunduh
+    try { reportOrders = await DB.listOrders(from.toISOString(), to.toISOString()); } catch (e) { return toast(e.message, true); }
     // Teks yang diawali = + - @ diberi tanda kutip satu supaya tidak dijalankan sebagai rumus di Excel
     const cell = v => { let s = String(v ?? ''); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
