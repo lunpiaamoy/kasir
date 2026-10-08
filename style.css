@@ -999,3 +999,20 @@ label { color: #5a4a46; }
   .topbar { padding-top: 10px; padding-bottom: 6px; backdrop-filter: none; -webkit-backdrop-filter: none; background: #fff; }
 }
 @media print { .topbar .tabs { display: none !important; } body { padding-bottom: 0; } }
+
+/* Pembayaran: 4 pilihan, DP, campuran */
+.pay-seg { grid-template-columns: repeat(4, 1fr); }
+.pay-seg button { padding-left: 2px; padding-right: 2px; font-size: 14px; }
+.dp-toggle { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-weight: 500; cursor: pointer; }
+.dp-toggle input { width: 18px; height: 18px; accent-color: var(--amoy); margin: 0; }
+.pay-note { margin: 6px 0 2px; font-size: 14px; color: var(--muted); }
+.pay-note b { color: var(--ink); }
+/* Kemasan dus */
+.pack-rows { display: grid; gap: 6px; padding-top: 4px; }
+.pack-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pack-foot { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.pack-foot.warn { color: var(--warn); }
+/* Pesanan: sisa bayar */
+.order-due { margin: 4px 0; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pay-rest .row2 { margin: 8px 0; }
+.pay-rest .seg { margin-top: 8px; }

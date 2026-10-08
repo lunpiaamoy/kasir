@@ -28,6 +28,14 @@
   const hhmm = t => (t ? t.slice(0, 5).replace(':', '.') : '');
   const longDate = d => d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const FUL_LABEL = { langsung: 'Langsung', ambil: 'Ambil', kirim: 'Kirim' };
+  const PAY_LABEL = { tunai: 'Tunai', qris: 'QRIS', transfer: 'Transfer', campuran: 'Campuran', belum: 'Belum bayar' };
+  // Pembayaran nota (018). Nota lama tanpa data pembayaran dianggap lunas saat dibuat.
+  const paymentsOf = o => Array.isArray(o.order_payments) ? o.order_payments
+    : (o.total > 0 && PAY_LABEL[o.pay_method] && !['campuran', 'belum'].includes(o.pay_method) ? [{ at: o.created_at, method: o.pay_method, amount: o.total }] : []);
+  const paidOf = o => paymentsOf(o).reduce((s, p) => s + p.amount, 0);
+  const dueOf = o => o.status === 'batal' ? 0 : Math.max(0, o.total - paidOf(o));
+  const PACK_SIZES = [10, 5, 1];
+  const packText = pk => (pk || []).filter(x => x.count > 0).map(x => `${x.count} dus isi ${x.size}`).join(', ');
 
   let toastTimer;
   function toast(msg, bad = false) {
@@ -418,27 +426,75 @@
     const b = e.target.closest('button'); if (!b) return;
     setPay(b.dataset.val);
   });
-  $('paid').addEventListener('input', renderPayment);
+  ['paid', 'payNow', 'mixQris', 'mixTransfer'].forEach(id => $(id).addEventListener('input', renderPayment));
+  $('dpCheck').addEventListener('change', () => { if ($('dpCheck').checked && !$('payNow').value) $('payNow').value = ''; renderPayment(); });
   $('quickCash').addEventListener('click', e => {
     const b = e.target.closest('[data-cash]'); if (!b) return;
     $('paid').value = rp(Number(b.dataset.cash)); renderPayment();
   });
+  // Yang harus dibayar di nota ini sekarang (saat ubah nota: dikurangi pelunasan yang sudah diterima belakangan)
+  const dueNow = () => Math.max(0, cartTotal() - (editing?.later || 0));
+  const dpMode = () => segValue($('fulfillSeg')) !== 'langsung' && $('dpCheck').checked;
+  const payNowVal = () => dpMode() ? Math.min(toInt($('payNow').value), dueNow()) : dueNow();
+  // Daftar pembayaran dari isian: [{method, amount}] + bagian tunai
+  function payPlan() {
+    const pay = segValue($('paySeg')), now = payNowVal();
+    if (pay !== 'campuran') return { pays: now ? [{ method: pay, amount: now }] : [], cash: pay === 'tunai' ? now : 0 };
+    const q = toInt($('mixQris').value), t = toInt($('mixTransfer').value), c = now - q - t;
+    return { pays: [{ method: 'qris', amount: q }, { method: 'transfer', amount: t }, { method: 'tunai', amount: c }].filter(x => x.amount > 0), cash: c, over: c < 0 };
+  }
   function renderPayment() {
-    const total = cartTotal();
+    const ful = segValue($('fulfillSeg')), pay = segValue($('paySeg'));
+    $('dpToggle').hidden = ful === 'langsung';
+    $('dpFields').hidden = !dpMode();
+    $('mixFields').hidden = pay !== 'campuran';
+    const plan = payPlan(), cash = Math.max(0, plan.cash);
+    $('dpSisa').textContent = rp(dueNow() - payNowVal());
+    $('mixCash').textContent = plan.over ? 'QRIS + transfer melebihi yang dibayar' : rp(cash);
+    $('cashFields').hidden = !(cash > 0);
     const opts = new Set();
-    if (total) {
-      opts.add(total);
-      [10000, 20000, 50000, 100000].forEach(step => opts.add(Math.ceil(total / step) * step));
-      opts.add(Math.ceil(total / 100000) * 100000 + 100000);
+    if (cash) {
+      opts.add(cash);
+      [10000, 20000, 50000, 100000].forEach(step => opts.add(Math.ceil(cash / step) * step));
+      opts.add(Math.ceil(cash / 100000) * 100000 + 100000);
     }
     $('quickCash').innerHTML = [...opts].sort((a, b) => a - b).slice(0, 5)
-      .map(v => `<button type="button" data-cash="${v}">${v === total ? 'Uang pas' : rp(v)}</button>`).join('');
+      .map(v => `<button type="button" data-cash="${v}">${v === cash ? 'Uang pas' : rp(v)}</button>`).join('');
     const paid = toInt($('paid').value);
-    const change = paid - total;
+    const change = paid - cash;
     $('changeOut').textContent = paid ? (change >= 0 ? rp(change) : 'Kurang ' + rp(-change)) : '0';
     $('changeOut').parentElement.classList.toggle('short', paid > 0 && change < 0);
+    renderPack();
   }
-  ['ongkir', 'paid'].forEach(id => $(id).addEventListener('blur', () => { const v = toInt($(id).value); $(id).value = v ? rp(v) : ''; }));
+
+  // ---- Kemasan dus (isi 10 / 5 / 1) ----
+  const pack = new Map(PACK_SIZES.map(z => [z, 0]));
+  const cartPcs = () => [...cart.values()].reduce((s, q) => s + q, 0);
+  function renderPack() {
+    const inPack = PACK_SIZES.reduce((s, z) => s + z * pack.get(z), 0), pcs = cartPcs();
+    const list = PACK_SIZES.filter(z => pack.get(z)).map(z => ({ size: z, count: pack.get(z) }));
+    $('packSum').textContent = list.length ? `${packText(list)}${inPack !== pcs ? ` · ${inPack} dari ${pcs} pcs` : ''}` : '(opsional) dibagi per dus';
+    $('packRows').innerHTML = PACK_SIZES.map(z => `<div class="pack-row"><span>Dus isi <b>${z}</b></span>
+        <div class="stepper"><button type="button" data-packdec="${z}" aria-label="Kurangi dus isi ${z}">−</button>
+        <input value="${pack.get(z)}" inputmode="numeric" data-packqty="${z}" aria-label="Jumlah dus isi ${z}">
+        <button type="button" data-packinc="${z}" aria-label="Tambah dus isi ${z}">+</button></div></div>`).join('')
+      + `<div class="pack-foot ${inPack && inPack !== pcs ? 'warn' : ''}">Di dus: <b>${inPack}</b> dari <b>${pcs}</b> pcs${inPack && inPack !== pcs ? (inPack > pcs ? ' · dus lebih banyak dari pesanan' : ` · ${pcs - inPack} pcs belum masuk dus`) : ''}
+        ${pcs ? '<button type="button" class="link" data-packauto>Bagi otomatis</button>' : ''} ${inPack ? '<button type="button" class="link" data-packclear>Kosongkan</button>' : ''}</div>`;
+  }
+  $('packRows').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.packinc) pack.set(+b.dataset.packinc, pack.get(+b.dataset.packinc) + 1);
+    if (b.dataset.packdec) pack.set(+b.dataset.packdec, Math.max(0, pack.get(+b.dataset.packdec) - 1));
+    if ('packclear' in b.dataset) PACK_SIZES.forEach(z => pack.set(z, 0));
+    if ('packauto' in b.dataset) { let left = cartPcs(); PACK_SIZES.forEach(z => { pack.set(z, Math.floor(left / z)); left %= z; }); }
+    renderPack();
+  });
+  $('packRows').addEventListener('change', e => {
+    const inp = e.target.closest('[data-packqty]'); if (!inp) return;
+    pack.set(+inp.dataset.packqty, Math.min(999, toInt(inp.value))); renderPack();
+  });
+  const packList = () => PACK_SIZES.filter(z => pack.get(z)).map(z => ({ size: z, count: pack.get(z) }));
+  ['ongkir', 'paid', 'payNow', 'mixQris', 'mixTransfer'].forEach(id => $(id).addEventListener('blur', () => { const v = toInt($(id).value); $(id).value = v ? rp(v) : ''; }));
 
   // Bagian Pembeli dilipat untuk jual langsung; terbuka otomatis untuk ambil/kirim atau kalau sudah diisi
   function syncCustBox() {
@@ -452,12 +508,14 @@
     if (v !== 'langsung') $('custBox').open = true;
     $('fulfillFields').hidden = v === 'langsung';
     $('ongkirField').hidden = v !== 'kirim';
+    renderPayment();
   }
-  function setPay(v) { setSeg($('paySeg'), v); $('cashFields').hidden = v !== 'tunai'; }
+  function setPay(v) { setSeg($('paySeg'), PAY_LABEL[v] && v !== 'belum' ? v : 'tunai'); renderPayment(); }
 
   function resetCart() {
     cart.clear(); editing = null;
-    ['custName', 'custWa', 'custAddress', 'orderNote', 'fDate', 'fTime', 'ongkir', 'paid'].forEach(id => ($(id).value = ''));
+    ['custName', 'custWa', 'custAddress', 'orderNote', 'fDate', 'fTime', 'ongkir', 'paid', 'payNow', 'mixQris', 'mixTransfer'].forEach(id => ($(id).value = ''));
+    $('dpCheck').checked = false; PACK_SIZES.forEach(z => pack.set(z, 0)); $('packBox').open = false;
     setFulfill('langsung'); setPay('tunai');
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
@@ -480,9 +538,24 @@
     $('fDate').value = o.fulfill_date || ''; showTime((o.fulfill_time || '').replace(/\D/g, '').slice(0, 4));
     $('ongkir').value = o.ongkir ? rp(o.ongkir) : '';
     $('custAddress').value = o.address || '';
-    setPay(o.pay_method); $('paid').value = o.pay_method === 'tunai' ? rp(o.paid) : '';
+    // Pembayaran saat nota dibuat bisa diubah; pelunasan yang diterima belakangan tetap
+    const pays = paymentsOf(o), first = pays.filter(p => new Date(p.at) <= new Date(o.created_at)), later = pays.filter(p => !first.includes(p));
+    editing.later = later.reduce((s, p) => s + p.amount, 0);
+    const methods = [...new Set(first.map(p => p.method))], firstSum = first.reduce((s, p) => s + p.amount, 0);
+    const sumOf = m => first.filter(p => p.method === m).reduce((s, p) => s + p.amount, 0);
+    setPay(methods.length > 1 ? 'campuran' : methods[0] || 'tunai');
+    if (methods.length > 1) { $('mixQris').value = sumOf('qris') ? rp(sumOf('qris')) : ''; $('mixTransfer').value = sumOf('transfer') ? rp(sumOf('transfer')) : ''; }
+    // pembayaran awal dipertahankan apa adanya (tambahan barang tidak otomatis dianggap sudah dibayar)
+    $('dpCheck').checked = o.fulfillment !== 'langsung' && firstSum < o.total;
+    $('payNow').value = $('dpCheck').checked && firstSum ? rp(firstSum) : '';
+    const cashFirst = sumOf('tunai');
+    $('paid').value = cashFirst ? rp(cashFirst + (later.length ? 0 : o.change || 0)) : '';
+    (o.packing || []).forEach(x => { if (pack.has(x.size)) pack.set(x.size, x.count); });
+    if ((o.packing || []).length) $('packBox').open = true;
+    renderPayment();
     $('cartTitle').textContent = `Ubah nota ${notaNo(o)}`;
     $('editBanner').innerHTML = `Stok dan total dihitung ulang saat disimpan. Harga produk yang sudah ada di nota tetap memakai harga lama.
+      ${editing.later ? `<br>Pelunasan <b>Rp ${rp(editing.later)}</b> yang diterima sesudah nota dibuat tetap tercatat; yang diisi di bawah hanya pembayaran awal.` : ''}
       <button class="link" id="cancelEditBtn">Batal ubah</button>
       <div class="seq-edit"><label for="editSeq">No. nota (${o.year})</label>
         <input id="editSeq" inputmode="numeric" value="${String(o.seq).padStart(5, '0')}" autocomplete="off">
@@ -512,7 +585,10 @@
       if (!$('fDate').value || !timeDigits()) return err('Isi tanggal dan pukul ' + (ful === 'kirim' ? 'kirim.' : 'ambil.'));
       if (!timeValid()) return err('Pukul belum lengkap atau tidak valid. Ketik 4 angka, mis. 1030 untuk 10:30.');
     }
-    if (pay === 'tunai' && toInt($('paid').value) < total) return err('Uang diterima kurang dari total.');
+    const plan = payPlan();
+    if (plan.over) return err('Jumlah QRIS + transfer melebihi yang dibayar sekarang.');
+    if (dpMode() && toInt($('payNow').value) > dueNow()) return err('Yang dibayar sekarang melebihi total.');
+    if (plan.cash > 0 && toInt($('paid').value) < plan.cash) return err(`Uang tunai diterima kurang dari Rp ${rp(plan.cash)}.`);
     const seq = editing ? toInt($('editSeq').value) : null;
     if (editing && !seq) return err('Isi nomor nota.');
 
@@ -525,8 +601,11 @@
       fulfill_time: ful === 'langsung' ? '' : timeValue(),
       ongkir: ful === 'kirim' ? toInt($('ongkir').value) : 0,
       address: ful === 'kirim' ? $('custAddress').value.trim() : '',
-      pay_method: pay,
-      paid: pay === 'tunai' ? toInt($('paid').value) : total,
+      pay_method: pay === 'campuran' ? (plan.pays[0]?.method || 'tunai') : pay,
+      paid: plan.cash > 0 ? toInt($('paid').value) : total,
+      payments: plan.pays,
+      tendered: plan.cash > 0 ? toInt($('paid').value) : 0,
+      packing: packList(),
       note: $('orderNote').value.trim(),
       ...(editing ? { seq } : {}),
     };
@@ -547,6 +626,24 @@
   });
 
   // ---------------------------------------------------------------- Receipt
+  // Baris pembayaran di struk. Nota biasa (sekali bayar lunas): TUNAI/QRIS/TRANSFER + kembalian.
+  // DP/pelunasan/campuran: tiap pembayaran dengan tanggal, lalu SISA atau LUNAS.
+  function receiptPayRows(o) {
+    const pays = paymentsOf(o), due = dueOf(o), U = m => (PAY_LABEL[m] || m).toUpperCase();
+    const ddmm = iso => { const d = new Date(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`; };
+    const isLater = p => new Date(p.at) > new Date(o.created_at);
+    const lastIsCash = pays.length && pays[pays.length - 1].method === 'tunai';
+    if (!due && !pays.some(isLater)) {   // dibayar lunas sekaligus (satu atau beberapa cara)
+      const rows = pays.map(p => [U(p.method), rp(p.amount + (p.method === 'tunai' ? o.change || 0 : 0))]);
+      if (pays.some(p => p.method === 'tunai')) rows.push(['KEMBALIAN', rp(o.change || 0)]);
+      return rows;
+    }
+    const rows = pays.map(p => [`${isLater(p) ? 'BAYAR' : 'DP'} ${ddmm(p.at)} ${U(p.method)}`, rp(p.amount)]);
+    if (!pays.length) rows.push(['DIBAYAR', '0']);
+    rows.push(due ? ['SISA', rp(due)] : ['STATUS', 'LUNAS']);
+    if (lastIsCash && o.change) rows.push(['KEMBALIAN', rp(o.change)]);
+    return rows;
+  }
   function receiptHtml(o) {
     const cats = groupBy(o.order_items, 'category');
     const created = new Date(o.created_at);
@@ -574,9 +671,9 @@
       <div class="r-rule"></div>
       <table class="tot">
         <tr><td>TOTAL</td><td>${rp(o.total)}</td></tr>
-        <tr><td>${o.pay_method === 'qris' ? 'QRIS' : 'TUNAI'}</td><td>${rp(o.paid)}</td></tr>
-        ${o.pay_method === 'tunai' ? `<tr><td>KEMBALIAN</td><td>${rp(o.change)}</td></tr>` : ''}
+        ${receiptPayRows(o).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}
       </table>
+      ${(o.packing || []).length ? `<div class="r-gap"></div>${kv([['KEMASAN', esc(packText(o.packing))]])}` : ''}
       <div class="r-gap"></div>
       ${kv([['NO', notaNo(o)], ['TANGGAL', dmy(created)], ['WAKTU', `${pad(created.getHours())}.${pad(created.getMinutes())}`]])}
       ${fulRows}
@@ -596,7 +693,7 @@
   async function doPrint(openDrawer = false) {
     if (!window.Printer?.direct) return browserPrint();
     $('printBtn').disabled = true;
-    try { await Printer.printOrder(receiptOrder, STORE, { openDrawer }); toast(openDrawer ? 'Struk dicetak · laci dibuka' : 'Struk dicetak'); }
+    try { await Printer.printOrder(receiptOrder, STORE, { openDrawer, payRows: receiptPayRows }); toast(openDrawer ? 'Struk dicetak · laci dibuka' : 'Struk dicetak'); }
     catch (e) { toast(e.message, true); }
     finally { $('printBtn').disabled = false; }
   }
@@ -709,7 +806,9 @@
     return [
       `*${STORE.name.toUpperCase()}*`, '',
       ...o.order_items.map(i => `${i.category} ${i.name}\n  ${i.qty} x ${rp(i.price)} = ${rp(i.subtotal)}`), '',
-      `*Total: Rp ${rp(o.total)}*`, '',
+      `*Total: Rp ${rp(o.total)}*`,
+      ...(dueOf(o) ? [`Dibayar: Rp ${rp(paidOf(o))}`, `*Sisa: Rp ${rp(dueOf(o))}*`] : []),
+      ...((o.packing || []).length ? [`Kemasan: ${packText(o.packing)}`] : []), '',
       ...(o.status === 'batal' ? ['*NOTA INI DIBATALKAN*', ''] : []),
       'Terima Kasih.', '',
       STORE.name, STORE.address, STORE.phone, '',
@@ -744,6 +843,9 @@
     $('waHint').hidden = false;
   });
 
+  // Laci dibuka kalau pembayaran terakhir (yang baru saja diterima) memakai uang tunai
+  const openDrawerFor = o => { const pays = paymentsOf(o), last = pays[pays.length - 1];
+    return !!last && pays.filter(p => p.at === last.at).some(p => p.method === 'tunai'); };
   function showReceipt(order, autoPrint = false) {
     receiptOrder = order;
     $('waHint').hidden = true;
@@ -751,7 +853,7 @@
     $('receipt').innerHTML = receiptHtml(order);
     $('receiptTitle').textContent = 'Struk ' + notaNo(order);
     $('receiptModal').hidden = false;
-    if (autoPrint) doPrint(!!window.Printer?.direct && Printer.settings.drawer && order.pay_method === 'tunai' && order.status !== 'batal');
+    if (autoPrint) doPrint(!!window.Printer?.direct && Printer.settings.drawer && order.status !== 'batal' && openDrawerFor(order));
   }
   $('printBtn').addEventListener('click', () => doPrint(false));
   $('closeReceiptBtn').addEventListener('click', () => ($('receiptModal').hidden = true));
@@ -799,10 +901,13 @@
               <div class="order-items">${esc(itemsSummary(o))}</div>
               ${o.fulfillment === 'kirim' && o.address ? `<div class="order-items">Alamat: ${esc(o.address)}</div>` : ''}
               ${o.note ? `<div class="order-note">Catatan: ${esc(o.note)}</div>` : ''}
-              <div class="order-total"><span>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'} · Nota ${notaNo(o)}</span><span>${rp(o.total)}</span></div>
+              <div class="order-total"><span>${PAY_LABEL[o.pay_method] || o.pay_method} · Nota ${notaNo(o)}</span><span>${rp(o.total)}</span></div>
+              ${dueOf(o) ? `<div class="order-due"><span class="chip warn">Belum lunas</span> Dibayar ${rp(paidOf(o))} · <b>sisa Rp ${rp(dueOf(o))}</b></div>` : ''}
+              ${(o.packing || []).length ? `<div class="order-items">Kemasan: ${esc(packText(o.packing))}</div>` : ''}
               ${o.fulfillment === 'kirim' ? `<div class="muted">Ongkir ${rp(o.ongkir)}</div>` : ''}
               <div class="actions" data-actions>
-                <button class="primary small" data-done="${o.id}">Tandai selesai</button>
+                ${dueOf(o) ? `<button class="primary small" data-payrest="${o.id}">Terima pelunasan</button>` : ''}
+                <button class="${dueOf(o) ? 'ghost' : 'primary'} small" data-done="${o.id}">Tandai selesai</button>
                 ${o.customer_wa ? waTextLink(o.customer_wa, reminderText(o), 'ghost small btn-link', 'Ingatkan via WA') : ''}
                 <button class="ghost small danger need-batal" data-cancel="${o.id}">Batalkan</button>
                 <span class="icon-acts">
@@ -828,7 +933,7 @@
           <td data-sort="${pad(d.getHours())}${pad(d.getMinutes())}">${pad(d.getHours())}.${pad(d.getMinutes())}</td>
           <td>${esc(o.customer_name || '-')}</td>
           <td>${FUL_LABEL[o.fulfillment]}</td>
-          <td>${o.pay_method === 'qris' ? 'QRIS' : 'Tunai'}</td>
+          <td>${PAY_LABEL[o.pay_method] || esc(o.pay_method)}${dueOf(o) ? ` <span class="chip warn" title="Belum lunas">sisa ${rp(dueOf(o))}</span>` : ''}</td>
           <td class="num">${rp(o.total)}</td>
           <td>${statusChip(o.status)}${o.cancel_reason ? `<div class="muted cancel-reason">${esc(o.cancel_reason)}</div>` : ''}</td>
           <td><div class="add-stock" data-actions>
@@ -845,8 +950,37 @@
     const d = t.dataset;
     try {
       if (d.reprint) showReceipt(orderCache.get(Number(d.reprint)));
-      else if (d.done) { await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders(); }
+      else if (d.done) {
+        const o = orderCache.get(Number(d.done));
+        if (o && dueOf(o) && !confirm(`Nota ${notaNo(o)} belum lunas (sisa Rp ${rp(dueOf(o))}). Tetap tandai selesai?`)) return;
+        await DB.markDone(Number(d.done)); toast('Pesanan ditandai selesai'); renderOrders();
+      }
       else if (d.editorder) startEdit(orderCache.get(Number(d.editorder)));
+      else if (d.payrest) {
+        const o = orderCache.get(Number(d.payrest)), due = dueOf(o);
+        t.closest('[data-actions]').innerHTML = `<div class="confirm pay-rest" data-order="${o.id}">
+          <b>Terima pelunasan nota ${notaNo(o)}</b> · sisa <b>Rp ${rp(due)}</b>
+          <div class="seg compact" data-paym>${['tunai', 'qris', 'transfer'].map((m, i) => `<button type="button" data-val="${m}" aria-checked="${i === 0}">${PAY_LABEL[m]}</button>`).join('')}</div>
+          <div class="row2"><div><label>Jumlah dibayar</label><input data-payamt inputmode="numeric" value="${rp(due)}"></div>
+          <div data-paycash><label>Uang tunai diterima</label><input data-paytend inputmode="numeric" placeholder="${rp(due)}"></div></div>
+          <div class="actions"><button class="primary small" data-payyes="${o.id}">Simpan &amp; cetak</button>
+          <button class="ghost small" data-refresh-orders>Batal</button></div></div>`;
+      }
+      else if (t.closest('[data-paym]')) {
+        const box = t.closest('.pay-rest'); setSeg(t.closest('[data-paym]'), t.dataset.val);
+        box.querySelector('[data-paycash]').hidden = t.dataset.val !== 'tunai';
+      }
+      else if (d.payyes) {
+        const box = t.closest('.pay-rest'), method = segValue(box.querySelector('[data-paym]'));
+        const amount = toInt(box.querySelector('[data-payamt]').value), tend = toInt(box.querySelector('[data-paytend]').value) || amount;
+        if (!amount) return toast('Isi jumlah yang dibayar', true);
+        if (method === 'tunai' && tend < amount) return toast('Uang tunai diterima kurang', true);
+        t.disabled = true;
+        const o = await DB.addPayment(Number(d.payyes), method, amount, method === 'tunai' ? tend : null);
+        orderCache.set(o.id, o);
+        toast(dueOf(o) ? `Pembayaran diterima · sisa Rp ${rp(dueOf(o))}` : `Lunas${method === 'tunai' && tend > amount ? ` · kembalian Rp ${rp(tend - amount)}` : ''}`);
+        renderOrders(); showReceipt(o, true);
+      }
       else if (d.cancel) {
         const box = t.closest('[data-actions]');
         box.innerHTML = `<div class="confirm">Batalkan pesanan ini? Stok akan dikembalikan.
@@ -1248,14 +1382,17 @@
     const valid = orders.filter(o => o.status !== 'batal');
     const sum = (list, f) => list.reduce((s, o) => s + f(o), 0);
     const total = sum(valid, o => o.total);
-    const cash = sum(valid.filter(o => o.pay_method === 'tunai'), o => o.total);
-    const qris = sum(valid.filter(o => o.pay_method === 'qris'), o => o.total);
     const canceled = orders.length - valid.length;
-
-    const nPay = m => valid.filter(o => o.pay_method === m).length;
+    // Uang masuk per cara bayar di periode ini (termasuk DP & pelunasan nota periode lain)
+    const pays = (await DB.listPayments(from.toISOString(), to.toISOString()).catch(() => null))
+      ?? valid.flatMap(o => paymentsOf(o).map(p => ({ ...p, order_id: o.id, orders: o })));
+    const okPays = pays.filter(p => p.orders?.status !== 'batal');
+    const byM = m => { const l = okPays.filter(p => p.method === m); return [sum(l, p => p.amount), new Set(l.map(p => p.order_id)).size]; };
+    const due = sum(valid, dueOf);
+    const split = ['tunai', 'qris', 'transfer'].map(m => [m, ...byM(m)]).filter(([m, a]) => a || m !== 'transfer');
     $('metrics').innerHTML = `
       <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b>
-        <span class="sale-split"><span>Transaksi (${valid.length})</span><span>Tunai Rp ${rp(cash)} (${nPay('tunai')})</span><span>QRIS Rp ${rp(qris)} (${nPay('qris')})</span></span></div>
+        <span class="sale-split"><span>Transaksi (${valid.length})</span>${split.map(([m, a, n]) => `<span>${PAY_LABEL[m]} Rp ${rp(a)} (${n})</span>`).join('')}${due ? `<span>Belum lunas Rp ${rp(due)}</span>` : ''}</span></div>
       <div class="metric lead need-laba" id="profitMetric"></div>
       ${canceled ? `<div class="mini-stats"><span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span></div>` : ''}`;
     // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama
@@ -1547,11 +1684,16 @@
       DB.getCashDay(day), DB.listOrders(from.toISOString(), to.toISOString()),
       DB.listCashOut(day).catch(e => ({ error: e.message })),   // tabel kas keluar (005) belum ada
     ]);
-    const tunai = orders.filter(o => o.status !== 'batal' && o.pay_method === 'tunai');
-    const cash = tunai.reduce((s, o) => s + o.total, 0);
-    const ongkir = tunai.filter(o => o.fulfillment === 'kirim').reduce((s, o) => s + (o.ongkir || 0), 0);
+    // Uang tunai masuk hari ini = pembayaran tunai hari ini (penjualan, DP, pelunasan) dari nota yang tidak batal
+    const pays = (await DB.listPayments(from.toISOString(), to.toISOString()).catch(() => null))
+      ?? orders.flatMap(o => paymentsOf(o).map(p => ({ ...p, order_id: o.id, orders: o })));
+    const cashPays = pays.filter(p => p.method === 'tunai' && p.orders?.status !== 'batal');
+    const cash = cashPays.reduce((s, p) => s + p.amount, 0);
+    // Ongkir tunai: nota kirim yang dibuat hari ini dan dibayar (sebagian) tunai saat dibuat
+    const ongkirOrders = new Map(cashPays.filter(p => p.orders?.fulfillment === 'kirim' && p.at === p.orders.created_at).map(p => [p.order_id, p.orders.ongkir || 0]));
+    const ongkir = [...ongkirOrders.values()].reduce((s, v) => s + v, 0);
     const outList = Array.isArray(out) ? out : [], outTotal = outList.reduce((s, x) => s + x.amount, 0);
-    return { day, cd, cash, ongkir, n: tunai.length, out: outList, outErr: out.error, outTotal,
+    return { day, cd, cash, ongkir, n: new Set(cashPays.map(p => p.order_id)).size, out: outList, outErr: out.error, outTotal,
       expected: cd ? cd.opening + cash + ongkir - outTotal : 0 };
   }
   function cashFigures(c, closed) {
@@ -1934,12 +2076,12 @@
     const [from, to] = range;
     const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const head = ['Nota', 'Tanggal', 'Waktu', 'Status', 'Pembeli', 'WA', 'Jenis', 'Bayar', 'Kategori', 'Produk',
-      'Pcs', 'Harga', 'Subtotal', 'Total nota', 'Ongkir', 'Catatan', 'Kasir'];
+      'Pcs', 'Harga', 'Subtotal', 'Total nota', 'Dibayar', 'Sisa', 'Ongkir', 'Kemasan', 'Catatan', 'Kasir'];
     const rows = [...reportOrders].reverse().flatMap(o => {
       const d = new Date(o.created_at);
       return o.order_items.map(i => [notaNo(o), ymdLocal(d), `${pad(d.getHours())}:${pad(d.getMinutes())}`, o.status,
-        o.customer_name, o.customer_wa, FUL_LABEL[o.fulfillment], o.pay_method === 'qris' ? 'QRIS' : 'Tunai',
-        i.category, i.name, i.qty, i.price, i.subtotal, o.total, o.ongkir, o.note || '', o.cashier || '']);
+        o.customer_name, o.customer_wa, FUL_LABEL[o.fulfillment], PAY_LABEL[o.pay_method] || o.pay_method,
+        i.category, i.name, i.qty, i.price, i.subtotal, o.total, paidOf(o), dueOf(o), o.ongkir, packText(o.packing), o.note || '', o.cashier || '']);
     });
     if (!rows.length) return toast('Tidak ada transaksi di periode ini', true);
     const csv = '﻿' + [head, ...rows].map(r => r.map(cell).join(';')).join('\r\n');
