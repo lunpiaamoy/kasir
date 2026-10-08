@@ -1016,3 +1016,4 @@ label { color: #5a4a46; }
 .order-due { margin: 4px 0; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pay-rest .row2 { margin: 8px 0; }
 .pay-rest .seg { margin-top: 8px; }
+body:not(.can-laci) .need-laci { display: none !important; }

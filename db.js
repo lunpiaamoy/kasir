@@ -14,13 +14,13 @@
   const PERM_DEFAULTS = {
     pesanan: true, batal: true, ubah_nota: false, hapus_nota: false,
     stok: true, stok_masuk: true, stok_pindah: true, stok_kurang: false, opname: false, produk_tambah: false, produk_ubah: false,
-    kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false,
-    laporan: true, laporan_unduh: true,
+    kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false, laci: true,
+    laporan: false, laporan_unduh: false,
     pembelian: false, pembelian_catat: false, pembelian_hapus: false, laba: false,
-    kontak: true, kontak_ubah: false, kontak_hapus: false };
+    kontak: false, kontak_ubah: false, kontak_hapus: false };
   const PERM_PARENT = {};
   [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_pindah stok_kurang opname produk_tambah produk_ubah'],
-   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh laba'],
+   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus laci'], ['laporan', 'laporan_unduh laba'],
    ['pembelian', 'pembelian_catat pembelian_hapus'], ['kontak', 'kontak_ubah kontak_hapus']]
     .forEach(([tab, keys]) => keys.split(' ').forEach(k => (PERM_PARENT[k] = tab)));
   const permsFor = (role, perms) => {
@@ -160,6 +160,11 @@
 
       async createOrder(payload) {
         const { data, error } = await sb.rpc('create_order', { p: payload }); fail(error); return data;
+      },
+      // Buka laci tanpa transaksi (019): dicatat di catatan aktivitas. Sebelum 019: tidak dicatat.
+      async logDrawer(note = '') {
+        const { error } = await sb.rpc('log_drawer', { p_note: note });
+        if (error && !['PGRST202', '42883'].includes(error.code)) fail(error);
       },
       // Pembayaran (018): pelunasan / bayar sisa
       async addPayment(id, method, amount, tendered = null) {
@@ -516,6 +521,7 @@
         save(); return n;
       },
 
+      async logDrawer(note = '') { const db = load(); demoLog(db, 'buka_laci', '', { catatan: note }); save(); },
       async addPayment(id, method, amount, tendered = null) {
         const db = load(), o = db.orders.find(x => x.id === id);
         if (!o) throw new Error('Nota tidak ditemukan');

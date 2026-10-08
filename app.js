@@ -752,10 +752,10 @@
       <label class="pr-opt"><input type="checkbox" data-prset="logo" ${st.logo ? 'checked' : ''}><span>Cetak logo di struk</span></label>
       <div class="actions">
         <button class="ghost small" data-prtest ${P.connected ? '' : 'disabled'}>Tes cetak</button>
-        <button class="ghost small" data-prdrawer ${P.connected ? '' : 'disabled'}>Buka laci</button>
+        <button class="ghost small need-laci" data-prdrawer ${P.connected ? '' : 'disabled'}>Buka laci</button>
         ${P.connected ? '<button class="ghost small danger" data-prdisconnect>Putuskan</button>' : ''}
       </div>
-      <details class="pr-kick" ${P.connected ? 'open' : ''}>
+      <details class="pr-kick need-laci" ${P.connected ? 'open' : ''}>
         <summary>Laci tidak terbuka? Coba cara lain</summary>
         <p class="muted hint">Klik satu per satu. Cara yang membuat laci terbuka akan dipakai seterusnya.
           Sekarang dipakai: <b>${esc(P.KICK_NAMES[st.kick] || P.KICK_NAMES.auto)}</b>.</p>
@@ -781,16 +781,25 @@
     try {
       if (b.dataset.prconnect) { await Printer.connect(b.dataset.prconnect); prError = null; toast('Printer tersambung: ' + Printer.name); }
       if ('prtest' in b.dataset) { await Printer.test(STORE); toast('Tes cetak dikirim'); }
-      if ('prdrawer' in b.dataset) { await Printer.openDrawer(); toast('Perintah buka laci dikirim'); }
-      if (b.dataset.prkick) { Printer.set('kick', b.dataset.prkick); await Printer.openDrawer(b.dataset.prkick); toast(`${Printer.KICK_NAMES[b.dataset.prkick]} dikirim. Kalau laci terbuka, cara ini dipakai seterusnya.`); }
+      if ('prdrawer' in b.dataset && await manualDrawer()) toast('Perintah buka laci dikirim · tercatat');
+      if (b.dataset.prkick) { Printer.set('kick', b.dataset.prkick); if (await manualDrawer(b.dataset.prkick)) toast(`${Printer.KICK_NAMES[b.dataset.prkick]} dikirim. Kalau laci terbuka, cara ini dipakai seterusnya.`); }
       if ('prdisconnect' in b.dataset) { await Printer.disconnect(); toast('Printer diputuskan'); }
     } catch (err) {
       prError = { how: b.dataset.prconnect || '', name: err?.name || 'Error', message: err?.message || String(err) };
       toast(prError.name === 'NotFoundError' && /cancel|chooser|no device|No port|selected/i.test(prError.message) ? 'Tidak ada printer yang dipilih' : 'Printer belum bisa tersambung. Lihat penjelasan di jendela printer.', true);
     } finally { b.disabled = false; renderPrinter(); }
   });
+  // Buka laci tanpa transaksi: butuh wewenang "laci" dan selalu dicatat (siapa, kapan, alasan)
+  async function manualDrawer(kind) {
+    if (!can('laci')) throw new Error('Akun ini tidak punya wewenang membuka laci tanpa transaksi');
+    const note = prompt('Alasan membuka laci (mis. tukar uang, tes laci):', '');
+    if (note === null) return false;
+    await DB.logDrawer(note.trim());
+    await Printer.openDrawer(kind);
+    return true;
+  }
   $('drawerBtn').addEventListener('click', async () => {
-    try { await Printer.openDrawer(); toast('Laci dibuka'); } catch (e) { toast(e.message, true); }
+    try { if (await manualDrawer()) toast('Laci dibuka · tercatat di catatan aktivitas'); } catch (e) { toast(e.message, true); }
   });
   if (window.Printer) { Printer.onChange(renderPrinter); renderPrinter(); if (Printer.direct) Printer.reconnect(); }
   // ---- Nota ke WhatsApp sebagai teks ----
@@ -2074,7 +2083,9 @@
   let reportOrders = [];
   $('exportBtn').addEventListener('click', () => {
     const [from, to] = range;
-    const cell = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    // Teks yang diawali = + - @ diberi tanda kutip satu supaya tidak dijalankan sebagai rumus di Excel
+    const cell = v => { let s = String(v ?? ''); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const head = ['Nota', 'Tanggal', 'Waktu', 'Status', 'Pembeli', 'WA', 'Jenis', 'Bayar', 'Kategori', 'Produk',
       'Pcs', 'Harga', 'Subtotal', 'Total nota', 'Dibayar', 'Sisa', 'Ongkir', 'Kemasan', 'Catatan', 'Kasir'];
     const rows = [...reportOrders].reverse().flatMap(o => {
@@ -2234,7 +2245,7 @@
     const b = e.target.closest('[data-days]'); if (!b) return;
     logDays = Number(b.dataset.days); setSeg($('logSeg'), b.dataset.days); renderLog();
   });
-  const payTxt = m => m === 'qris' ? 'QRIS' : 'Tunai';
+  const payTxt = m => PAY_LABEL[m] || m || '-';
   function logText(x) {
     const d = x.detail || {}, a = d.sebelum || {}, b = d.sesudah || {};
     const chg = (label, k, f = v => v) => a[k] !== b[k] ? `${label} ${esc(f(a[k]))} → ${esc(f(b[k]))}` : '';
@@ -2252,6 +2263,8 @@
       case 'hapus_kas': return ['Hapus kas ' + dmy(parseYmd(x.ref)), `uang awal Rp ${rp(d.opening)}${d.counted != null ? ` · dihitung Rp ${rp(d.counted)}` : ''}`];
       case 'kas_keluar': return [(d.hapus ? 'Hapus kas keluar ' : 'Ubah kas keluar ') + dmy(parseYmd(x.ref)),
         d.hapus ? `Rp ${rp(d.amount)} · ${esc(d.note || '')} · dicatat oleh ${esc((d.by || '').split('@')[0])}` : `Rp ${rp(d.sebelum)} → Rp ${rp(d.sesudah)} · ${esc(d.note || '')}`];
+      case 'buka_laci': return ['Buka laci tanpa transaksi', esc(d.catatan || '-')];
+      case 'bayar_nota': return ['Pembayaran nota ' + x.ref, `${payTxt(d.cara)} Rp ${rp(d.jumlah)} · ${d.sisa ? 'sisa Rp ' + rp(d.sisa) : 'lunas'}`];
       default: return [esc(x.action), esc(JSON.stringify(d))];
     }
   }
@@ -2277,25 +2290,26 @@
       { batal: 'Batalkan pesanan', ubah_nota: 'Ubah nota (termasuk nomor nota)', hapus_nota: 'Hapus nota' }],
     ['kas', 'Tab Kas', 'Lihat kas hari ini & riwayat kas',
       { kas_buka: 'Isi / ubah uang awal', kas_tutup: 'Tutup kasir (hitung uang di laci)', kas_keluar: 'Catat kas keluar',
-        kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar' }],
+        kas_ubah: 'Ubah kas yang sudah ditutup, hitung ulang, mulai ulang kas', kas_hapus: 'Hapus riwayat kas & kas keluar',
+        laci: 'Buka laci uang tanpa transaksi (selalu tercatat)' }],
     ['pembelian', 'Tab Produksi', 'Lihat pembelian bahan, hasil produksi & sisa bahan',
       { pembelian_catat: 'Catat & ubah pembelian/produksi', pembelian_hapus: 'Hapus catatan' }],
     ['stok', 'Tab Stok', 'Lihat stok & kartu stok',
       { stok_masuk: 'Tambah stok masuk', stok_pindah: 'Pindah stok toko ↔ rumah', stok_kurang: 'Kurangi stok (koreksi)', opname: 'Stok opname',
         produk_tambah: 'Tambah produk baru', produk_ubah: 'Ubah produk, harga & sembunyikan produk' }],
-    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris',
+    ['laporan', 'Tab Laporan', 'Lihat penjualan, grafik, jam ramai, produk terlaris, dan semua transaksi lama',
       { laporan_unduh: 'Unduh Excel (CSV)', laba: 'Lihat laba (penjualan − bahan terpakai)' }],
-    ['kontak', 'Tab Kontak', 'Lihat daftar pembeli, WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
+    ['kontak', 'Tab Kontak', 'Lihat daftar pembeli (nama, WA, alamat), WhatsApp, pesan baru', { kontak_ubah: 'Ubah kontak', kontak_hapus: 'Hapus kontak' }],
 
   ];
   // Contoh pengaturan (bisa diubah lagi sebelum disimpan)
   const PERM_PRESETS = {
-    kasir: { label: 'Kasir biasa', desc: 'Melayani pembeli, buka & tutup kas. Tidak bisa batal/ubah/hapus nota, kurangi stok, atau melihat omzet.',
+    kasir: { label: 'Kasir biasa', desc: 'Melayani pembeli, buka & tutup kas. Tidak bisa batal/ubah/hapus nota, kurangi stok, melihat omzet, atau data pembeli lama.',
       reason: true, cashmax: 100000,
-      perms: { pesanan: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, stok: 1, stok_pindah: 1, kontak: 1 } },
+      perms: { pesanan: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, laci: 1, stok: 1, stok_pindah: 1 } },
     kepala: { label: 'Kepala toko', desc: 'Seperti kasir, ditambah batal & ubah nota, stok masuk & opname, produksi, laporan, ubah kontak.',
       reason: true, cashmax: 0,
-      perms: { pesanan: 1, batal: 1, ubah_nota: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, pembelian: 1, pembelian_catat: 1,
+      perms: { pesanan: 1, batal: 1, ubah_nota: 1, kas: 1, kas_buka: 1, kas_tutup: 1, kas_keluar: 1, laci: 1, pembelian: 1, pembelian_catat: 1,
                stok: 1, stok_masuk: 1, stok_pindah: 1, opname: 1, laporan: 1, kontak: 1, kontak_ubah: 1 } },
     produksi: { label: 'Bagian produksi', desc: 'Hanya mencatat pembelian bahan & hasil produksi, dan melihat stok.',
       reason: true, cashmax: 0,
