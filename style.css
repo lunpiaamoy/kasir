@@ -964,3 +964,56 @@ label { color: #5a4a46; }
 .pr-error ol { margin: 6px 0 6px 18px; padding: 0; }
 .pr-error li { margin: 3px 0; }
 .pr-error small { color: #8a5a54; word-break: break-word; }
+
+/* Kasir: bagian Pembeli bisa dilipat */
+.cust-box > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 2px 0 6px; }
+.cust-box > summary::-webkit-details-marker { display: none; }
+.cust-box > summary::before { content: "▸"; color: var(--gold); font-size: 12px; transition: transform .15s; }
+.cust-box[open] > summary::before { transform: rotate(90deg); }
+.cust-legend { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+.cust-sum { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cust-box[open] .cust-sum { display: none; }
+
+/* Pemberitahuan lebih ringkas, bisa ditutup */
+#kasirNotices .notice { padding: 7px 34px 7px 14px; font-size: 13px; position: relative; margin-bottom: 6px; }
+.notice-x { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; min-height: 0 !important;
+  padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 6px; }
+.notice-x:hover { background: rgba(0, 0, 0, .05); color: var(--ink); }
+.receipt .r-thanks { font-weight: 700; }
+
+/* HP: menu tab pindah ke bawah layar (seperti aplikasi HP), bilah atas jadi pendek */
+@media (max-width: 560px) {
+  .topbar .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0;
+    display: flex; gap: 0; overflow-x: auto; background: rgba(255, 255, 255, .97);
+    border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(74, 28, 22, .08);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); scrollbar-width: none; }
+  .topbar .tabs::-webkit-scrollbar { display: none; }
+  .topbar .tab { flex: 1 1 0; min-width: 0; padding: 9px 0; font-size: 11px; letter-spacing: -.02em; border-radius: 10px; text-align: center; white-space: nowrap; }
+  .topbar .tab .count { position: absolute; transform: translate(-4px, -10px); min-width: 16px; padding: 0 4px; font-size: 10px; }
+  .topbar .tab { position: relative; }
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
+  .brand small { display: none; }
+  .brand b { font-size: 19px; }
+  .brand img { height: 30px; }
+  .topbar { padding-top: 10px; padding-bottom: 6px; backdrop-filter: none; -webkit-backdrop-filter: none; background: #fff; }
+}
+@media print { .topbar .tabs { display: none !important; } body { padding-bottom: 0; } }
+
+/* Pembayaran: 4 pilihan, DP, campuran */
+.pay-seg { grid-template-columns: repeat(4, 1fr); }
+.pay-seg button { padding-left: 2px; padding-right: 2px; font-size: 14px; }
+.dp-toggle { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-weight: 500; cursor: pointer; }
+.dp-toggle input { width: 18px; height: 18px; accent-color: var(--amoy); margin: 0; }
+.pay-note { margin: 6px 0 2px; font-size: 14px; color: var(--muted); }
+.pay-note b { color: var(--ink); }
+/* Kemasan dus */
+.pack-rows { display: grid; gap: 6px; padding-top: 4px; }
+.pack-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pack-foot { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.pack-foot.warn { color: var(--warn); }
+/* Pesanan: sisa bayar */
+.order-due { margin: 4px 0; font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pay-rest .row2 { margin: 8px 0; }
+.pay-rest .seg { margin-top: 8px; }
+body:not(.can-laci) .need-laci { display: none !important; }

@@ -1,0 +1,54 @@
+name: Perawatan harian
+
+# 1. Setiap hari: sapa database supaya Supabase (paket gratis) tidak tertidur karena sepi.
+# 2. Setiap Minggu (atau dijalankan manual): cadangan seluruh data, dikunci dengan password
+#    BACKUP_PASSWORD, disimpan 90 hari di tab Actions → Perawatan harian → Artifacts.
+#    Membuka: openssl enc -d -aes-256-cbc -pbkdf2 -in cadangan.sql.gz.enc | gunzip > cadangan.sql
+on:
+  schedule:
+    - cron: '17 20 * * *'   # 03:17 WIB
+  workflow_dispatch:
+
+concurrency: perawatan
+
+jobs:
+  rawat:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+    steps:
+      - name: Sapa database
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::warning::Secret SUPABASE_DB_URL belum diisi."; exit 0; fi
+          command -v psql >/dev/null || (sudo apt-get update -q && sudo apt-get install -y -q postgresql-client)
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select 'aktif', now()"
+
+      - name: Cadangan mingguan
+        id: cadangan
+        if: env.DATABASE_URL != ''
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$(TZ=Asia/Jakarta date +%u)" != 7 ]; then
+            echo "Bukan hari Minggu, cadangan dilewati."; exit 0
+          fi
+          if [ -z "$BACKUP_PASSWORD" ]; then
+            echo "::warning::Secret BACKUP_PASSWORD belum diisi, cadangan dilewati (tidak disimpan tanpa password)."; exit 0
+          fi
+          mkdir -p cadangan && umask 077
+          nama="lunpia-$(TZ=Asia/Jakarta date +%Y-%m-%d)"
+          # pg_dump versi 17 dari docker supaya cocok dengan versi database Supabase
+          docker run --rm -e DATABASE_URL postgres:17 \
+            pg_dump "$DATABASE_URL" --schema=public --no-owner --no-privileges \
+            | gzip -9 | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSWORD \
+            > "cadangan/$nama.sql.gz.enc"
+          test -s "cadangan/$nama.sql.gz.enc"
+          ls -l cadangan
+          echo "nama=$nama" >> "$GITHUB_OUTPUT"
+
+      - name: Simpan cadangan
+        if: steps.cadangan.outputs.nama != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.cadangan.outputs.nama }}
+          path: cadangan/
+          retention-days: 90

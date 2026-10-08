@@ -14,13 +14,13 @@
   const PERM_DEFAULTS = {
     pesanan: true, batal: true, ubah_nota: false, hapus_nota: false,
     stok: true, stok_masuk: true, stok_pindah: true, stok_kurang: false, opname: false, produk_tambah: false, produk_ubah: false,
-    kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false,
-    laporan: true, laporan_unduh: true,
+    kas: true, kas_buka: true, kas_tutup: true, kas_keluar: true, kas_ubah: false, kas_hapus: false, laci: true,
+    laporan: false, laporan_unduh: false,
     pembelian: false, pembelian_catat: false, pembelian_hapus: false, laba: false,
-    kontak: true, kontak_ubah: false, kontak_hapus: false };
+    kontak: false, kontak_ubah: false, kontak_hapus: false };
   const PERM_PARENT = {};
   [['pesanan', 'batal ubah_nota hapus_nota'], ['stok', 'stok_masuk stok_pindah stok_kurang opname produk_tambah produk_ubah'],
-   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus'], ['laporan', 'laporan_unduh laba'],
+   ['kas', 'kas_buka kas_tutup kas_keluar kas_ubah kas_hapus laci'], ['laporan', 'laporan_unduh laba'],
    ['pembelian', 'pembelian_catat pembelian_hapus'], ['kontak', 'kontak_ubah kontak_hapus']]
     .forEach(([tab, keys]) => keys.split(' ').forEach(k => (PERM_PARENT[k] = tab)));
   const permsFor = (role, perms) => {
@@ -63,6 +63,14 @@
       removeItem: k => { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch {} },
     };
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storage, persistSession: true } });
+    // Data nota ikut membawa pembayaran (018). Sebelum 018 terpasang, tanpa pembayaran.
+    let hasPayments = true;
+    const ORDER_SEL = () => hasPayments ? '*, order_items(*), order_payments(*)' : '*, order_items(*)';
+    sb.from('order_payments').select('id').limit(1).then(({ error }) => { if (error) hasPayments = false; });
+    const withPay = async fn => {
+      try { return await fn(); }
+      catch (e) { if (hasPayments && /order_payments/.test(e.message || '')) { hasPayments = false; return fn(); } throw e; }
+    };
     // Supabase membatasi 1000 baris per permintaan; ambil per halaman sampai habis.
     const all = async build => {
       const rows = [];
@@ -153,20 +161,45 @@
       async createOrder(payload) {
         const { data, error } = await sb.rpc('create_order', { p: payload }); fail(error); return data;
       },
-      async listOrders(fromIso, toIso) {
-        return all(() => sb.from('orders').select('*, order_items(*)')
+      // Buka laci tanpa transaksi (019): dicatat di catatan aktivitas. Sebelum 019: tidak dicatat.
+      async logDrawer(note = '') {
+        const { error } = await sb.rpc('log_drawer', { p_note: note });
+        if (error && !['PGRST202', '42883'].includes(error.code)) fail(error);
+      },
+      // Pembayaran (018): pelunasan / bayar sisa
+      async addPayment(id, method, amount, tendered = null) {
+        const { data, error } = await sb.rpc('add_payment', { p_order: id, p_method: method, p_amount: amount, p_tendered: tendered });
+        fail(error); return data;
+      },
+      // Pembayaran di rentang waktu (untuk kas & laporan). null kalau 018 belum terpasang.
+      async listPayments(fromIso, toIso) {
+        try {
+          return await all(() => sb.from('order_payments')
+            .select('order_id, at, method, amount, orders!inner(status, fulfillment, ongkir, created_at, pay_method, total)')
+            .gte('at', fromIso).lt('at', toIso).order('at'));
+        } catch { return null; }
+      },
+      // lean: hanya kolom untuk Laporan (lebih ringan dibanding seluruh isi nota)
+      async listOrders(fromIso, toIso, lean = false) {
+        const sel = () => lean ? 'id, created_at, total, status, pay_method, ongkir, order_items(category, name, qty, subtotal)'
+          + (hasPayments ? ', order_payments(amount, method, at)' : '') : ORDER_SEL();
+        return withPay(() => all(() => sb.from('orders').select(sel())
           .gte('created_at', fromIso).lt('created_at', toIso)
-          .order('created_at', { ascending: false }).order('id', { ascending: false }));
+          .order('created_at', { ascending: false }).order('id', { ascending: false })));
       },
       async listPending() {
-        const { data, error } = await sb.from('orders').select('*, order_items(*)').eq('status', 'menunggu')
-          .order('fulfill_date', { ascending: true, nullsFirst: false }).order('fulfill_time', { ascending: true });
-        fail(error); return data;
+        return withPay(async () => {
+          const { data, error } = await sb.from('orders').select(ORDER_SEL()).eq('status', 'menunggu')
+            .order('fulfill_date', { ascending: true, nullsFirst: false }).order('fulfill_time', { ascending: true });
+          fail(error); return data;
+        });
       },
       async recentOrders(limit = 30) {
-        const { data, error } = await sb.from('orders').select('*, order_items(*)')
-          .order('created_at', { ascending: false }).limit(limit);
-        fail(error); return data;
+        return withPay(async () => {
+          const { data, error } = await sb.from('orders').select(ORDER_SEL())
+            .order('created_at', { ascending: false }).limit(limit);
+          fail(error); return data;
+        });
       },
       async updateOrder(id, payload) {
         const { data, error } = await sb.rpc('update_order', { p_id: id, p: payload }); fail(error); return data;
@@ -178,6 +211,16 @@
       // Semua pembeli yang pernah dicatat (untuk daftar kontak)
       async listCustomers() {
         return all(() => sb.from('orders').select('*').order('id'));   // '*': tetap jalan walau kolom address (005) belum ada
+      },
+      // Ringkasan kontak dihitung di database (020); null = belum diperbarui → app menghitung sendiri
+      async contactSummary() {
+        const rows = [];
+        for (let i = 0; ; i += 1000) {
+          const { data, error } = await sb.rpc('contact_summary').order('key').range(i, i + 999);
+          if (error && ['PGRST202', '42883'].includes(error.code)) return null;
+          fail(error); rows.push(...data);
+          if (data.length < 1000) return rows;
+        }
       },
       async markDone(id) {
         const { error } = await sb.rpc('mark_done', { p_id: id });
@@ -271,12 +314,14 @@
         const ch = sb.channel('lunpia-sinkron');
         ['orders', 'products', 'cash_days', 'cash_out', 'productions'].forEach(table =>
           ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table)));
+        // pembayaran (DP/pelunasan) memengaruhi pesanan & kas
+        if (hasPayments) ch.on('postgres_changes', { event: '*', schema: 'public', table: 'order_payments' }, () => cb('orders'));
         ch.subscribe(status => onStatus(status));
         return () => { sb.removeChannel(ch); };
       },
       async backup() {
         const out = {};
-        const tables = { products: '*', orders: '*, order_items(*)', stock_moves: '*', cash_days: '*', cash_out: '*',
+        const tables = { products: '*', orders: ORDER_SEL(), stock_moves: '*', cash_days: '*', cash_out: '*',
           productions: '*', staff: '*', hidden_contacts: '*', activity_log: '*' };
         for (const [t, cols] of Object.entries(tables)) {
           try { out[t] = await all(() => sb.from(t).select(cols)); } catch (e) { out[t] = { error: e.message }; }
@@ -384,6 +429,28 @@
     };
     // Catatan aktivitas di mode contoh (meniru pemicu di database, 011)
     const notaLabel = o => `(${o.year}) ${String(o.seq).padStart(5, '0')}`;
+    // Sama dengan prepare_payments() di 018
+    const preparePayments = (p, due, full) => {
+      const n = v => Number(v) || 0;
+      if (!Array.isArray(p.payments)) {
+        const m = p.pay_method || 'tunai', tendered = m === 'tunai' ? n(p.paid) : due;
+        if (tendered < due) throw new Error('Uang yang dibayar kurang dari total');
+        return { pays: due > 0 ? [{ method: m, amount: due }] : [], method: m, paid: tendered, change: tendered - due };
+      }
+      const pays = p.payments.filter(x => n(x.amount) !== 0).map(x => {
+        if (!['tunai', 'qris', 'transfer'].includes(x.method) || n(x.amount) < 0) throw new Error('Cara bayar tidak valid');
+        return { method: x.method, amount: n(x.amount) };
+      });
+      const sum = pays.reduce((s, x) => s + x.amount, 0), cash = pays.filter(x => x.method === 'tunai').reduce((s, x) => s + x.amount, 0);
+      if (sum > due) throw new Error(`Pembayaran (${sum}) melebihi total yang harus dibayar (${due})`);
+      if (full && sum < due) throw new Error('Penjualan langsung harus dibayar lunas');
+      const tendered = p.tendered ? n(p.tendered) : cash;
+      if (tendered < cash) throw new Error('Uang tunai yang diterima kurang');
+      const ms = [...new Set(pays.map(x => x.method))];
+      return { pays, method: ms.length > 1 ? 'campuran' : ms[0] || 'belum', paid: sum - cash + tendered, change: tendered - cash };
+    };
+    const cleanPacking = pk => (Array.isArray(pk) ? pk : []).map(x => ({ size: Number(x.size), count: Number(x.count) }))
+      .filter(x => [10, 5, 1].includes(x.size) && x.count >= 1 && x.count <= 999);
     const demoLog = (db, action, ref, detail) =>
       (db.log ||= []).push({ id: db.nextId++, at: new Date().toISOString(), actor: 'contoh@lunpia.local', action, ref, detail });
     let demoDevice = null;
@@ -467,6 +534,33 @@
         save(); return n;
       },
 
+      async logDrawer(note = '') { const db = load(); demoLog(db, 'buka_laci', '', { catatan: note }); save(); },
+      async addPayment(id, method, amount, tendered = null) {
+        const db = load(), o = db.orders.find(x => x.id === id);
+        if (!o) throw new Error('Nota tidak ditemukan');
+        if (o.status === 'batal') throw new Error('Nota yang dibatalkan tidak bisa dibayar');
+        if (!['tunai', 'qris', 'transfer'].includes(method)) throw new Error('Cara bayar tidak valid');
+        amount = Number(amount) || 0;
+        if (amount <= 0) throw new Error('Isi jumlah pembayaran');
+        o.order_payments ||= [];
+        const due = o.total - o.order_payments.reduce((s, x) => s + x.amount, 0);
+        if (due <= 0) throw new Error('Nota ini sudah lunas');
+        if (amount > due) throw new Error(`Pembayaran melebihi sisa (Rp ${due.toLocaleString('id-ID')})`);
+        if (method === 'tunai' && (tendered ?? amount) < amount) throw new Error('Uang tunai yang diterima kurang');
+        o.order_payments.push({ id: db.nextId++, order_id: id, at: new Date().toISOString(), method, amount, created_by: 'contoh@lunpia.local' });
+        o.paid += amount;
+        if (method === 'tunai') o.change = (tendered ?? amount) - amount;
+        const ms = [...new Set(o.order_payments.map(x => x.method))];
+        o.pay_method = ms.length > 1 ? 'campuran' : ms[0] || 'belum';
+        demoLog(db, 'bayar_nota', notaLabel(o), { cara: method, jumlah: amount, sisa: due - amount });
+        save(); return clone(o);
+      },
+      async listPayments(fromIso, toIso) {
+        return load().orders.flatMap(o => (o.order_payments || (o.total ? [{ at: o.created_at, method: o.pay_method, amount: o.total }] : []))
+          .filter(x => x.at >= fromIso && x.at < toIso)
+          .map(x => ({ order_id: o.id, at: x.at, method: x.method, amount: x.amount,
+            orders: { status: o.status, fulfillment: o.fulfillment, ongkir: o.ongkir, created_at: o.created_at, pay_method: o.pay_method, total: o.total } })));
+      },
       async createOrder(p) {
         const db = load();
         if (!p.items.length) throw new Error('Keranjang masih kosong');
@@ -476,8 +570,7 @@
           return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price: prod.price, subtotal: prod.price * it.qty, cost: demoCost(db, prod.id) };
         });
         const total = items.reduce((s, i) => s + i.subtotal, 0);
-        const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
-        if (paid < total) throw new Error('Uang yang dibayar kurang dari total');
+        const pp = preparePayments(p, total, (p.fulfillment || 'langsung') === 'langsung');
         const year = jakartaYear();
         db.counters ||= {};
         const seq = db.counters[year] = Math.max(db.counters[year] || 0,
@@ -488,12 +581,13 @@
           customer_name: p.customer_name || '', customer_wa: p.customer_wa || '',
           fulfillment: ful, fulfill_date: p.fulfill_date || null, fulfill_time: p.fulfill_time || null,
           ongkir: ful === 'kirim' ? Number(p.ongkir) || 0 : 0,
-          total, pay_method: p.pay_method, paid, change: paid - total,
+          total, pay_method: pp.method, paid: pp.paid, change: pp.change, packing: cleanPacking(p.packing),
           status: ful === 'langsung' ? 'selesai' : 'menunggu',
           note: p.note || '', cancelled_at: null, cashier: 'contoh@lunpia.local',
           address: ful === 'kirim' ? p.address || '' : '',
           order_items: items,
         };
+        order.order_payments = pp.pays.map(x => ({ id: db.nextId++, order_id: order.id, at: order.created_at, ...x, created_by: 'contoh@lunpia.local' }));
         items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
         db.orders.push(order); save();
         return clone(order);
@@ -511,8 +605,10 @@
           return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price, subtotal: price * it.qty, cost: demoCost(db, prod.id) };
         });
         const total = items.reduce((s, i) => s + i.subtotal, 0);
-        const paid = p.pay_method === 'qris' ? total : Number(p.paid) || 0;
-        if (paid < total) throw new Error('Uang yang dibayar kurang dari total');
+        const oldPays = o.order_payments || (o.total ? [{ id: db.nextId++, at: o.created_at, method: o.pay_method, amount: o.total }] : []);
+        const later = oldPays.filter(x => x.at > o.created_at), laterSum = later.reduce((s, x) => s + x.amount, 0);
+        if (laterSum > total) throw new Error('Total baru lebih kecil dari pelunasan yang sudah diterima');
+        const pp = preparePayments(p, total - laterSum, (p.fulfillment || 'langsung') === 'langsung' && !laterSum);
         o.order_items.forEach(i => { const pr = db.products.find(x => x.id === i.product_id); if (pr) pr.stock += i.qty; });
         items.forEach(i => { db.products.find(x => x.id === i.product_id).stock -= i.qty; });
         const ful = p.fulfillment || 'langsung';
@@ -526,11 +622,14 @@
           customer_name: p.customer_name || '', customer_wa: p.customer_wa || '',
           fulfillment: ful, fulfill_date: p.fulfill_date || null, fulfill_time: p.fulfill_time || null,
           ongkir: ful === 'kirim' ? Number(p.ongkir) || 0 : 0,
-          total, pay_method: p.pay_method, paid, change: paid - total, note: p.note || '',
+          total, paid: pp.paid + laterSum, change: pp.change, note: p.note || '',
+          packing: 'packing' in p ? cleanPacking(p.packing) : (o.packing || []),
+          order_payments: [...pp.pays.map(x => ({ id: db.nextId++, order_id: o.id, at: o.created_at, ...x })), ...later],
           address: ful === 'kirim' ? p.address || '' : '',
           status: ful === 'langsung' ? 'selesai' : o.fulfillment === 'langsung' ? 'menunggu' : o.status,
           edited_at: new Date().toISOString(), order_items: items,
         });
+        { const ms = [...new Set(o.order_payments.map(x => x.method))]; o.pay_method = ms.length > 1 ? 'campuran' : ms[0] || 'belum'; }
         demoLog(db, 'ubah_nota', notaLabel(o), { sebelum: was,
           sesudah: { nota: notaLabel(o), total: o.total, pay_method: o.pay_method, paid: o.paid, customer: o.customer_name } });
         save(); return clone(o);
@@ -547,6 +646,7 @@
       async listCustomers() {
         return clone(load().orders).map(({ order_items, ...o }) => o);
       },
+      async contactSummary() { return null; },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id, reason = '') {
         const db = load(); const o = db.orders.find(x => x.id === id);

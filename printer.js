@@ -193,7 +193,7 @@
   const pad = (n, w = 2) => String(n).padStart(w, '0');
 
   // Susun struk dari data nota (sama isinya dengan struk di layar)
-  function receipt(o, store, { logo, drawer } = {}) {
+  function receipt(o, store, { logo, drawer, payRows } = {}) {
     const d = new Doc(), created = new Date(o.created_at);
     const nota = `(${o.year}) ${pad(o.seq, 5)}`;
     const dmy = x => `${pad(x.getDate())} / ${pad(x.getMonth() + 1)} / ${x.getFullYear()}`;
@@ -211,8 +211,8 @@
       for (const i of items) { d.wrap(String(i.name).toUpperCase(), ' '); d.lr(`  ${i.qty} x ${rp(i.price)}`, rp(i.subtotal)); }
     }
     d.rule().bold(true).lr('TOTAL', rp(o.total)).bold(false);
-    d.lr(o.pay_method === 'qris' ? 'QRIS' : 'TUNAI', rp(o.paid));
-    if (o.pay_method === 'tunai') d.lr('KEMBALIAN', rp(o.change));
+    (payRows ? payRows(o) : [[o.pay_method === 'qris' ? 'QRIS' : 'TUNAI', rp(o.paid)]]).forEach(([k, v]) => d.lr(k, v));
+    if (o.packing?.length) d.kv('KEMASAN', o.packing.map(x => `${x.count} dus isi ${x.size}`).join(', '));
     d.rule().kv('NO', nota).kv('TANGGAL', dmy(created)).kv('WAKTU', `${pad(created.getHours())}.${pad(created.getMinutes())}`);
     if (o.fulfillment && o.fulfillment !== 'langsung') {
       d.rule().kv(o.fulfillment === 'kirim' ? 'KIRIM' : 'AMBIL', o.fulfill_date ? o.fulfill_date.split('-').reverse().join(' / ') : '-')
@@ -252,9 +252,9 @@
     get direct() { return settings.mode === 'direct' && support.any; },
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },
     connect, reconnect, disconnect,
-    async printOrder(o, store, { openDrawer = false } = {}) {
+    async printOrder(o, store, { openDrawer = false, payRows } = {}) {
       const logo = settings.logo ? await loadLogo() : false;
-      await send(receipt(o, store, { logo, drawer: openDrawer }));
+      await send(receipt(o, store, { logo, drawer: openDrawer, payRows }));
     },
     async openDrawer(kind) { await send(new Doc().drawer(kind).bytes()); },
     KICK_NAMES: { auto: 'Otomatis (cara 1–3 sekaligus)', a: 'Cara 1 · standar', b: 'Cara 2 · pin 5', c: 'Cara 3 · sinyal panjang', d: 'Cara 4 · perintah langsung' },

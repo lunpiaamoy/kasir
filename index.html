@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=77">
+<link rel="stylesheet" href="style.css?v=81">
 </head>
 <body>
 
@@ -103,13 +103,18 @@
 
         <div class="cart-total"><span>Total</span><b id="cartTotal">0</b></div>
 
-        <fieldset class="field-group">
-          <legend>Pembeli</legend>
+        <details class="field-group cust-box pack-box" id="packBox">
+          <summary><span class="cust-legend">Kemasan dus</span> <span class="muted cust-sum" id="packSum">(opsional) dibagi per dus</span></summary>
+          <div class="pack-rows" id="packRows"></div>
+        </details>
+
+        <details class="field-group cust-box" id="custBox">
+          <summary><span class="cust-legend">Pembeli</span> <span class="muted cust-sum" id="custSum">(opsional) nama &amp; WA</span></summary>
           <div class="row2">
             <div><label for="custName">Nama</label><input id="custName" autocomplete="off"></div>
             <div><label for="custWa">WA</label><input id="custWa" inputmode="tel" autocomplete="off"></div>
           </div>
-        </fieldset>
+        </details>
 
         <fieldset class="field-group">
           <legend>Diambil kapan?</legend>
@@ -132,9 +137,24 @@
 
         <fieldset class="field-group">
           <legend>Pembayaran</legend>
-          <div class="seg" role="radiogroup" id="paySeg">
+          <div class="seg pay-seg" role="radiogroup" id="paySeg">
             <button type="button" role="radio" data-val="tunai" aria-checked="true">Tunai</button>
             <button type="button" role="radio" data-val="qris" aria-checked="false">QRIS</button>
+            <button type="button" role="radio" data-val="transfer" aria-checked="false">Transfer</button>
+            <button type="button" role="radio" data-val="campuran" aria-checked="false">Campuran</button>
+          </div>
+          <label class="dp-toggle" id="dpToggle" hidden><input type="checkbox" id="dpCheck"> <span>Bayar sebagian dulu (<b>DP</b>) / belum bayar</span></label>
+          <div id="dpFields" hidden>
+            <label for="payNow">Dibayar sekarang</label>
+            <input id="payNow" inputmode="numeric" placeholder="0" autocomplete="off">
+            <div class="pay-note">Sisa dibayar nanti: <b id="dpSisa">0</b></div>
+          </div>
+          <div id="mixFields" hidden>
+            <div class="row2">
+              <div><label for="mixQris">QRIS</label><input id="mixQris" inputmode="numeric" placeholder="0" autocomplete="off"></div>
+              <div><label for="mixTransfer">Transfer</label><input id="mixTransfer" inputmode="numeric" placeholder="0" autocomplete="off"></div>
+            </div>
+            <div class="pay-note">Sisanya tunai: <b id="mixCash">0</b></div>
           </div>
           <div id="cashFields">
             <label for="paid">Uang diterima</label>
@@ -384,7 +404,7 @@
     <p class="muted hint" id="printHint">Di jendela Print pilih printer thermal, ukuran kertas 58 mm, margin <b>None</b>. Atau sambungkan printer langsung lewat tombol 🖨 di atas.</p>
     <div class="actions">
       <button class="primary" id="printBtn">Cetak</button>
-      <button class="ghost" id="drawerBtn" hidden>Buka laci</button>
+      <button class="ghost need-laci" id="drawerBtn" hidden>Buka laci</button>
       <button class="ghost" id="closeReceiptBtn">Tutup</button>
     </div>
     <div class="actions wa-row">
@@ -423,10 +443,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=77"></script>
-<script src="db.js?v=77"></script>
-<script src="printer.js?v=77"></script>
-<script src="app.js?v=77"></script>
+<script src="config.js?v=81"></script>
+<script src="db.js?v=81"></script>
+<script src="printer.js?v=81"></script>
+<script src="app.js?v=81"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>
