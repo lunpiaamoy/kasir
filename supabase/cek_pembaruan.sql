@@ -19,5 +19,6 @@ select file, case when ada then 'sudah' else 'BELUM' end as status from (values
   ('017', to_regprocedure('public.online_devices()') is not null),
   ('018', to_regclass('public.order_payments') is not null),
   ('019', to_regprocedure('public.log_drawer(text)') is not null),
-  ('020', to_regprocedure('public.contact_summary()') is not null)
+  ('020', to_regprocedure('public.contact_summary()') is not null),
+  ('021', strpos(pg_get_functiondef('public.update_order(bigint, jsonb)'::regprocedure), 'new_price') > 0)
 ) as t(file, ada) order by file;
