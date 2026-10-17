@@ -327,6 +327,8 @@
   // Saat mengubah nota: produk yang sudah ada di nota memakai harga lama (sama seperti di database)
   let editing = null;   // { order, prices: Map(product_id → harga), oldQty: Map(product_id → qty) }
   const priceOf = id => editing?.prices.get(id) ?? byId(id)?.price ?? 0;
+  // Barang dikosongkan saat mengubah nota: kalau ditambah lagi, pakai harga terbaru
+  const dropFromCart = id => { cart.delete(id); editing?.prices.delete(id); };
   const cartTotal = () => [...cart].reduce((s, [id, q]) => s + priceOf(id) * q, 0);
 
   function renderCart() {
@@ -339,7 +341,8 @@
         const p = byId(id), avail = p.stock + (editing?.oldQty.get(id) || 0);
         const short = q > avail ? `<span class="l-warn">Stok tinggal ${Math.max(avail, 0)}</span>` : '';
         return `<div class="line">
-          <div class="l-name">${esc(p.name)}<small>${esc(p.category)} · ${rp(priceOf(id))}</small>${short}</div>
+          <div class="l-name">${esc(p.name)}<small>${esc(p.category)} · ${rp(priceOf(id))}${priceOf(id) !== p.price
+            ? ` <button type="button" class="link" data-newprice="${id}" title="Pakai harga di daftar barang">harga lama · pakai ${rp(p.price)}</button>` : ''}</small>${short}</div>
           <div class="stepper">
             <button type="button" data-dec="${id}" aria-label="Kurangi">−</button>
             <input value="${q}" inputmode="numeric" data-qty="${id}" aria-label="Jumlah ${esc(p.name)}">
@@ -363,16 +366,17 @@
     .observe(document.querySelector('.cart'));
   $('cartJump').addEventListener('click', () => document.querySelector('.cart').scrollIntoView({ behavior: 'smooth', block: 'start' }));
   $('cartItems').addEventListener('click', e => {
-    const inc = e.target.closest('[data-inc]'), dec = e.target.closest('[data-dec]');
-    if (inc) { const id = Number(inc.dataset.inc); cart.set(id, cart.get(id) + 1); warnStock(id); }
-    else if (dec) { const id = Number(dec.dataset.dec); const q = cart.get(id) - 1; q > 0 ? cart.set(id, q) : cart.delete(id); }
+    const inc = e.target.closest('[data-inc]'), dec = e.target.closest('[data-dec]'), np = e.target.closest('[data-newprice]');
+    if (np) editing?.prices.delete(Number(np.dataset.newprice));
+    else if (inc) { const id = Number(inc.dataset.inc); cart.set(id, cart.get(id) + 1); warnStock(id); }
+    else if (dec) { const id = Number(dec.dataset.dec); const q = cart.get(id) - 1; q > 0 ? cart.set(id, q) : dropFromCart(id); }
     else return;
     renderCatalog(); renderCart();
   });
   $('cartItems').addEventListener('change', e => {
     const inp = e.target.closest('[data-qty]'); if (!inp) return;
     const id = Number(inp.dataset.qty), q = toInt(inp.value);
-    q > 0 ? cart.set(id, q) : cart.delete(id);
+    q > 0 ? cart.set(id, q) : dropFromCart(id);
     renderCatalog(); renderCart();
   });
 
@@ -593,7 +597,7 @@
     if (editing && !seq) return err('Isi nomor nota.');
 
     const payload = {
-      items: [...cart].map(([product_id, qty]) => ({ product_id, qty })),
+      items: [...cart].map(([product_id, qty]) => ({ product_id, qty, ...(editing && !editing.prices.has(product_id) ? { new_price: true } : {}) })),
       customer_name: $('custName').value.trim(),
       customer_wa: $('custWa').value.trim(),
       fulfillment: ful,
@@ -1404,10 +1408,11 @@
     const okPays = pays.filter(p => p.orders?.status !== 'batal');
     const byM = m => { const l = okPays.filter(p => p.method === m); return [sum(l, p => p.amount), new Set(l.map(p => p.order_id)).size]; };
     const due = sum(valid, dueOf);
+    const pcs = sum(valid, o => o.order_items.reduce((s, i) => s + i.qty, 0));
     const split = ['tunai', 'qris', 'transfer'].map(m => [m, ...byM(m)]).filter(([m, a]) => a || m !== 'transfer');
     $('metrics').innerHTML = `
       <div class="metric lead"><small>Penjualan</small><b>Rp ${rp(total)}</b>
-        <span class="sale-split"><span>Transaksi (${valid.length})</span>${split.map(([m, a, n]) => `<span>${PAY_LABEL[m]} Rp ${rp(a)} (${n})</span>`).join('')}${due ? `<span>Belum lunas Rp ${rp(due)}</span>` : ''}</span></div>
+        <span class="sale-split"><span>Transaksi (${valid.length})</span><span>${rp(pcs)} pcs</span>${split.map(([m, a, n]) => `<span>${PAY_LABEL[m]} Rp ${rp(a)} (${n})</span>`).join('')}${due ? `<span>Belum lunas Rp ${rp(due)}</span>` : ''}</span></div>
       <div class="metric lead need-laba" id="profitMetric"></div>
       ${canceled ? `<div class="mini-stats"><span title="Tidak dihitung"><small>Dibatalkan</small> ${canceled}</span></div>` : ''}`;
     // Laba = penjualan − bahan terpakai (dari tab Produksi) di periode yang sama

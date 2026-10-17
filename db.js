@@ -601,7 +601,7 @@
         const items = p.items.map(it => {
           const prod = db.products.find(x => x.id === it.product_id);
           if (!prod) throw new Error('Produk tidak ditemukan');
-          const price = oldPrice.get(prod.id) ?? prod.price;
+          const price = (it.new_price ? null : oldPrice.get(prod.id)) ?? prod.price;
           return { product_id: prod.id, category: prod.category, name: prod.name, qty: it.qty, price, subtotal: price * it.qty, cost: demoCost(db, prod.id) };
         });
         const total = items.reduce((s, i) => s + i.subtotal, 0);
