@@ -15,6 +15,8 @@
     card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
     edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
     print: svg('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v6H7z"/>'),
+    up:    svg('<path d="M6 15l6-6 6 6"/>'),
+    down:  svg('<path d="M6 9l6 6 6-6"/>'),
     trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
     order: svg('<path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2M12 11.5v5M9.5 14h5"/>'),
   };
@@ -92,7 +94,7 @@
   }
 
   // ---------------------------------------------------------------- State
-  let products = [];
+  let products = [], goneProducts = [];   // goneProducts: sudah dihapus, tetap dipakai untuk nota lama
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
@@ -266,8 +268,10 @@
 
   // ---------------------------------------------------------------- Products
   async function loadProducts() {
-    try { products = await DB.listProducts(); }
+    let all;
+    try { all = await DB.listProducts(); }
     catch (e) { toast(e.message, true); return; }
+    products = all.filter(p => !p.deleted_at); goneProducts = all.filter(p => p.deleted_at);
     const low = products.filter(p => p.active && p.stock <= p.min_stock).length;
     $('lowCount').hidden = !low; $('lowCount').textContent = low;
     renderCatalog(); renderCart(); renderStock();
@@ -323,7 +327,7 @@
   }
 
   // ---------------------------------------------------------------- Cart
-  const byId = id => products.find(p => p.id === id);
+  const byId = id => products.find(p => p.id === id) || goneProducts.find(p => p.id === id);
   // Saat mengubah nota: produk yang sudah ada di nota memakai harga lama (sama seperti di database)
   let editing = null;   // { order, prices: Map(product_id → harga), oldQty: Map(product_id → qty) }
   const priceOf = id => editing?.prices.get(id) ?? byId(id)?.price ?? 0;
@@ -1129,6 +1133,8 @@
       : 'Semua stok aman.') + (tokoEmpty.length
       ? `<br><b class="warn-text">Toko kosong, ada di rumah:</b> ${tokoEmpty.map(p => esc(`${p.category} ${p.name} (${homeOf(p)})`)).join(', ')}.` : '');
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
+    $('stockWrap').hidden = orderMode; $('orderList').hidden = !orderMode;
+    if (orderMode) return renderOrderMode();
     $('stockTable').innerHTML = `
       <thead><tr><th>Produk</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
@@ -1144,9 +1150,46 @@
             <button class="stock-btn move need-stok_pindah" data-act="move" data-id="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)}">${ICON.move}</button>
             <button class="stock-btn plain" data-card="${p.id}" title="Kartu stok (riwayat)" aria-label="Kartu stok ${esc(p.name)}">${ICON.card}</button>
             <button class="stock-btn plain need-produk_ubah" data-edit="${p.id}" title="Ubah produk" aria-label="Ubah ${esc(p.name)}">${ICON.edit}</button>
+            <button class="stock-btn danger owner-only" data-delprod="${p.id}" title="Hapus produk" aria-label="Hapus ${esc(p.name)}">${ICON.trash}</button>
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="6">Belum ada produk.</td></tr>'}</tbody>`;
   }
+
+  // Atur urutan: urutan di sini = urutan di Kasir. Jenis dan produk dalam jenis bisa dinaikkan/diturunkan.
+  let orderMode = false;
+  const orderGroups = () => [...groupBy(products, 'category')];
+  function renderOrderMode() {
+    const groups = orderGroups();
+    const arrows = (kind, key, i, n, label) => `<div class="stock-actions">
+      ${iconBtn('up', 'plain', `data-ord="${kind}" data-key="${esc(key)}" data-dir="-1"${i ? '' : ' disabled'}`, `Naikkan ${label}`)}
+      ${iconBtn('down', 'plain', `data-ord="${kind}" data-key="${esc(key)}" data-dir="1"${i < n - 1 ? '' : ' disabled'}`, `Turunkan ${label}`)}</div>`;
+    $('orderList').innerHTML = `<p class="muted hint">Urutan di sini sama dengan urutan di Kasir. Tekan tombol panah untuk menaikkan atau menurunkan jenis dan produk.</p>
+      ${groups.map(([cat, list], gi) => `<div class="order-group">
+        <div class="order-row cat"><b>${esc(cat)}</b>${arrows('cat', cat, gi, groups.length, 'jenis ' + cat)}</div>
+        ${list.map((p, i) => `<div class="order-row${p.active ? '' : ' dim'}"><span>${esc(p.name)}${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</span>
+          ${arrows('item', p.id, i, list.length, p.name)}</div>`).join('')}</div>`).join('')}`;
+  }
+  async function moveOrder(kind, key, dir) {
+    const groups = orderGroups().map(([c, l]) => [c, [...l]]);
+    const swap = (arr, i) => { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length) return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; };
+    if (kind === 'cat') { if (!swap(groups, groups.findIndex(([c]) => c === key))) return; }
+    else { const g = groups.find(([, l]) => l.some(p => p.id === Number(key)))[1]; if (!swap(g, g.findIndex(p => p.id === Number(key)))) return; }
+    const changes = groups.flatMap(([, l]) => l).map((p, i) => ({ p, sort: (i + 1) * 10 })).filter(x => x.p.sort !== x.sort);
+    changes.forEach(x => (x.p.sort = x.sort));
+    products.sort((a, b) => a.sort - b.sort || a.id - b.id);
+    renderStock(); renderCatalog();
+    try { await DB.setProductSort(changes.map(x => ({ id: x.p.id, sort: x.sort }))); }
+    catch (err) { toast(err.message, true); loadProducts(); }
+  }
+  $('orderList').addEventListener('click', e => {
+    const t = e.target.closest('[data-ord]'); if (t) moveOrder(t.dataset.ord, t.dataset.key, Number(t.dataset.dir));
+  });
+  $('orderBtn').addEventListener('click', () => {
+    orderMode = !orderMode;
+    $('orderBtn').textContent = orderMode ? 'Selesai atur urutan' : 'Atur urutan';
+    $('orderBtn').classList.toggle('primary', orderMode); $('orderBtn').classList.toggle('ghost', !orderMode);
+    $('productForm').hidden = true; renderStock();
+  });
 
   // Baris isian di bawah produk: + tambah, − kurangi, ⇄ pindah
   const ACT = {
@@ -1194,6 +1237,12 @@
     }
     if (t.dataset.edit) openProductForm(byId(Number(t.dataset.edit)));
     if (t.dataset.card) openStockCard(byId(Number(t.dataset.card)));
+    if (t.dataset.delprod) {
+      const p = byId(Number(t.dataset.delprod));
+      if (!confirm(`Hapus produk ${p.category} ${p.name}?${p.stock ? `\n\nMasih ada stok ${p.stock} pcs; stok ini ikut hilang dari daftar.` : ''}\n\nProduk hilang dari Kasir dan Stok. Nota lama, laporan, dan kartu stok tetap utuh.`)) return;
+      try { await DB.deleteProduct(p.id); toast(`${p.category} ${p.name} dihapus`); loadProducts(); }
+      catch (err) { toast(err.message, true); }
+    }
   });
   $('stockTable').addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.dataset?.mv === 'qty') e.target.closest('tr').querySelector('[data-movesave]').click();
@@ -1598,7 +1647,7 @@
     let loc = entry?.location; if (!loc) { try { loc = localStorage.getItem('lunpiaProdLoc'); } catch {} }
     loc = loc === 'rumah' ? 'rumah' : 'toko';
     // produk aktif + produk nonaktif yang sudah tercatat di entri ini
-    const list = products.filter(p => p.active || (e.outputs || []).some(o => o.product_id === p.id));
+    const list = [...products, ...goneProducts].filter(p => (p.active && !p.deleted_at) || (e.outputs || []).some(o => o.product_id === p.id));
     $('prodForm').dataset.id = entry?.id || '';
     $('prodForm').innerHTML = `<div class="prod-edit">
       <b>${entry ? 'Ubah catatan' : 'Catat pembelian & produksi'}</b>
@@ -2282,6 +2331,7 @@
       case 'hapus_nota': return ['Hapus nota ' + x.ref, `Rp ${rp(d.total)} · ${payTxt(d.pay_method)}${d.customer_name ? ' · ' + esc(d.customer_name) : ''} · ${
         esc((d.order_items || []).map(i => `${i.name} ×${i.qty}`).join(', '))}${d.status === 'batal' ? ' (sudah batal)' : ''}`];
       case 'stok': return ['Stok ' + esc(x.ref), `${d.delta > 0 ? '+' : ''}${d.delta} · ${esc(d.note || '')}`];
+      case 'hapus_produk': return ['Hapus produk ' + esc(x.ref), `Rp ${rp(d.price)} · sisa stok ${d.stock}`];
       case 'produk': return [d.baru ? 'Produk baru' : 'Ubah produk', d.baru ? `${esc(x.ref)} · Rp ${rp(d.price)}`
         : [chg('nama', 'name'), chg('harga', 'price', v => 'Rp ' + rp(v)), a.active !== b.active ? (b.active ? 'ditampilkan' : 'disembunyikan') : ''].filter(Boolean).join(' · ') || esc(x.ref)];
       case 'ubah_kas': return ['Ubah kas ' + dmy(parseYmd(x.ref)), [chg('uang awal', 'opening', v => 'Rp ' + rp(v)), chg('dihitung', 'counted', v => v == null ? '-' : 'Rp ' + rp(v)),

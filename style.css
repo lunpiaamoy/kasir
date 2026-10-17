@@ -1017,3 +1017,13 @@ label { color: #5a4a46; }
 .pay-rest .row2 { margin: 8px 0; }
 .pay-rest .seg { margin-top: 8px; }
 body:not(.can-laci) .need-laci { display: none !important; }
+
+/* Atur urutan produk (tab Stok) */
+.order-list { padding: 12px 16px; }
+.order-group { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.order-group:last-child { border-bottom: 0; }
+.order-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 4px 20px; }
+.order-row.cat { padding-left: 0; }
+.order-row .stock-actions { flex-wrap: nowrap; flex: none; }
+.order-row.dim > span { opacity: .55; }
+.stock-btn:disabled { opacity: .3; cursor: default; }
