@@ -15,6 +15,8 @@
     card:  svg('<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/>'),
     edit:  svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>'),
     print: svg('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v6H7z"/>'),
+    up:    svg('<path d="M6 15l6-6 6 6"/>'),
+    down:  svg('<path d="M6 9l6 6 6-6"/>'),
     trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
     order: svg('<path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2M12 11.5v5M9.5 14h5"/>'),
   };
@@ -1131,6 +1133,8 @@
       : 'Semua stok aman.') + (tokoEmpty.length
       ? `<br><b class="warn-text">Toko kosong, ada di rumah:</b> ${tokoEmpty.map(p => esc(`${p.category} ${p.name} (${homeOf(p)})`)).join(', ')}.` : '');
     $('categoryList').innerHTML = [...new Set(products.map(p => p.category))].map(c => `<option value="${esc(c)}">`).join('');
+    $('stockWrap').hidden = orderMode; $('orderList').hidden = !orderMode;
+    if (orderMode) return renderOrderMode();
     $('stockTable').innerHTML = `
       <thead><tr><th>Produk</th><th class="num">Toko</th><th class="num">Rumah</th><th class="num">Total</th><th>Status</th><th data-nosort></th></tr></thead>
       <tbody>${products.length ? products.map(p => `
@@ -1150,6 +1154,42 @@
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="6">Belum ada produk.</td></tr>'}</tbody>`;
   }
+
+  // Atur urutan: urutan di sini = urutan di Kasir. Jenis dan produk dalam jenis bisa dinaikkan/diturunkan.
+  let orderMode = false;
+  const orderGroups = () => [...groupBy(products, 'category')];
+  function renderOrderMode() {
+    const groups = orderGroups();
+    const arrows = (kind, key, i, n, label) => `<div class="stock-actions">
+      ${iconBtn('up', 'plain', `data-ord="${kind}" data-key="${esc(key)}" data-dir="-1"${i ? '' : ' disabled'}`, `Naikkan ${label}`)}
+      ${iconBtn('down', 'plain', `data-ord="${kind}" data-key="${esc(key)}" data-dir="1"${i < n - 1 ? '' : ' disabled'}`, `Turunkan ${label}`)}</div>`;
+    $('orderList').innerHTML = `<p class="muted hint">Urutan di sini sama dengan urutan di Kasir. Tekan tombol panah untuk menaikkan atau menurunkan jenis dan produk.</p>
+      ${groups.map(([cat, list], gi) => `<div class="order-group">
+        <div class="order-row cat"><b>${esc(cat)}</b>${arrows('cat', cat, gi, groups.length, 'jenis ' + cat)}</div>
+        ${list.map((p, i) => `<div class="order-row${p.active ? '' : ' dim'}"><span>${esc(p.name)}${p.active ? '' : ' <span class="chip plain">Disembunyikan</span>'}</span>
+          ${arrows('item', p.id, i, list.length, p.name)}</div>`).join('')}</div>`).join('')}`;
+  }
+  async function moveOrder(kind, key, dir) {
+    const groups = orderGroups().map(([c, l]) => [c, [...l]]);
+    const swap = (arr, i) => { const j = i + dir; if (i < 0 || j < 0 || j >= arr.length) return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; };
+    if (kind === 'cat') { if (!swap(groups, groups.findIndex(([c]) => c === key))) return; }
+    else { const g = groups.find(([, l]) => l.some(p => p.id === Number(key)))[1]; if (!swap(g, g.findIndex(p => p.id === Number(key)))) return; }
+    const changes = groups.flatMap(([, l]) => l).map((p, i) => ({ p, sort: (i + 1) * 10 })).filter(x => x.p.sort !== x.sort);
+    changes.forEach(x => (x.p.sort = x.sort));
+    products.sort((a, b) => a.sort - b.sort || a.id - b.id);
+    renderStock(); renderCatalog();
+    try { await DB.setProductSort(changes.map(x => ({ id: x.p.id, sort: x.sort }))); }
+    catch (err) { toast(err.message, true); loadProducts(); }
+  }
+  $('orderList').addEventListener('click', e => {
+    const t = e.target.closest('[data-ord]'); if (t) moveOrder(t.dataset.ord, t.dataset.key, Number(t.dataset.dir));
+  });
+  $('orderBtn').addEventListener('click', () => {
+    orderMode = !orderMode;
+    $('orderBtn').textContent = orderMode ? 'Selesai atur urutan' : 'Atur urutan';
+    $('orderBtn').classList.toggle('primary', orderMode); $('orderBtn').classList.toggle('ghost', !orderMode);
+    $('productForm').hidden = true; renderStock();
+  });
 
   // Baris isian di bawah produk: + tambah, − kurangi, ⇄ pindah
   const ACT = {
