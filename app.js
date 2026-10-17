@@ -92,7 +92,7 @@
   }
 
   // ---------------------------------------------------------------- State
-  let products = [];
+  let products = [], goneProducts = [];   // goneProducts: sudah dihapus, tetap dipakai untuk nota lama
   const cart = new Map();          // product_id -> qty
   let currentTab = 'kasir';
 
@@ -266,8 +266,10 @@
 
   // ---------------------------------------------------------------- Products
   async function loadProducts() {
-    try { products = await DB.listProducts(); }
+    let all;
+    try { all = await DB.listProducts(); }
     catch (e) { toast(e.message, true); return; }
+    products = all.filter(p => !p.deleted_at); goneProducts = all.filter(p => p.deleted_at);
     const low = products.filter(p => p.active && p.stock <= p.min_stock).length;
     $('lowCount').hidden = !low; $('lowCount').textContent = low;
     renderCatalog(); renderCart(); renderStock();
@@ -323,7 +325,7 @@
   }
 
   // ---------------------------------------------------------------- Cart
-  const byId = id => products.find(p => p.id === id);
+  const byId = id => products.find(p => p.id === id) || goneProducts.find(p => p.id === id);
   // Saat mengubah nota: produk yang sudah ada di nota memakai harga lama (sama seperti di database)
   let editing = null;   // { order, prices: Map(product_id → harga), oldQty: Map(product_id → qty) }
   const priceOf = id => editing?.prices.get(id) ?? byId(id)?.price ?? 0;
@@ -1144,6 +1146,7 @@
             <button class="stock-btn move need-stok_pindah" data-act="move" data-id="${p.id}" title="Pindah toko ↔ rumah" aria-label="Pindah stok ${esc(p.name)}">${ICON.move}</button>
             <button class="stock-btn plain" data-card="${p.id}" title="Kartu stok (riwayat)" aria-label="Kartu stok ${esc(p.name)}">${ICON.card}</button>
             <button class="stock-btn plain need-produk_ubah" data-edit="${p.id}" title="Ubah produk" aria-label="Ubah ${esc(p.name)}">${ICON.edit}</button>
+            <button class="stock-btn danger owner-only" data-delprod="${p.id}" title="Hapus produk" aria-label="Hapus ${esc(p.name)}">${ICON.trash}</button>
           </div></td>
         </tr>`).join('') : '<tr><td class="empty" colspan="6">Belum ada produk.</td></tr>'}</tbody>`;
   }
@@ -1194,6 +1197,12 @@
     }
     if (t.dataset.edit) openProductForm(byId(Number(t.dataset.edit)));
     if (t.dataset.card) openStockCard(byId(Number(t.dataset.card)));
+    if (t.dataset.delprod) {
+      const p = byId(Number(t.dataset.delprod));
+      if (!confirm(`Hapus produk ${p.category} ${p.name}?${p.stock ? `\n\nMasih ada stok ${p.stock} pcs; stok ini ikut hilang dari daftar.` : ''}\n\nProduk hilang dari Kasir dan Stok. Nota lama, laporan, dan kartu stok tetap utuh.`)) return;
+      try { await DB.deleteProduct(p.id); toast(`${p.category} ${p.name} dihapus`); loadProducts(); }
+      catch (err) { toast(err.message, true); }
+    }
   });
   $('stockTable').addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.dataset?.mv === 'qty') e.target.closest('tr').querySelector('[data-movesave]').click();
@@ -1598,7 +1607,7 @@
     let loc = entry?.location; if (!loc) { try { loc = localStorage.getItem('lunpiaProdLoc'); } catch {} }
     loc = loc === 'rumah' ? 'rumah' : 'toko';
     // produk aktif + produk nonaktif yang sudah tercatat di entri ini
-    const list = products.filter(p => p.active || (e.outputs || []).some(o => o.product_id === p.id));
+    const list = [...products, ...goneProducts].filter(p => (p.active && !p.deleted_at) || (e.outputs || []).some(o => o.product_id === p.id));
     $('prodForm').dataset.id = entry?.id || '';
     $('prodForm').innerHTML = `<div class="prod-edit">
       <b>${entry ? 'Ubah catatan' : 'Catat pembelian & produksi'}</b>
@@ -2282,6 +2291,7 @@
       case 'hapus_nota': return ['Hapus nota ' + x.ref, `Rp ${rp(d.total)} · ${payTxt(d.pay_method)}${d.customer_name ? ' · ' + esc(d.customer_name) : ''} · ${
         esc((d.order_items || []).map(i => `${i.name} ×${i.qty}`).join(', '))}${d.status === 'batal' ? ' (sudah batal)' : ''}`];
       case 'stok': return ['Stok ' + esc(x.ref), `${d.delta > 0 ? '+' : ''}${d.delta} · ${esc(d.note || '')}`];
+      case 'hapus_produk': return ['Hapus produk ' + esc(x.ref), `Rp ${rp(d.price)} · sisa stok ${d.stock}`];
       case 'produk': return [d.baru ? 'Produk baru' : 'Ubah produk', d.baru ? `${esc(x.ref)} · Rp ${rp(d.price)}`
         : [chg('nama', 'name'), chg('harga', 'price', v => 'Rp ' + rp(v)), a.active !== b.active ? (b.active ? 'ditampilkan' : 'disembunyikan') : ''].filter(Boolean).join(' · ') || esc(x.ref)];
       case 'ubah_kas': return ['Ubah kas ' + dmy(parseYmd(x.ref)), [chg('uang awal', 'opening', v => 'Rp ' + rp(v)), chg('dihitung', 'counted', v => v == null ? '-' : 'Rp ' + rp(v)),

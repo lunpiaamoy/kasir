@@ -141,6 +141,7 @@
         const { data, error } = await sb.from('products').select('*').order('sort').order('id');
         fail(error); return data;
       },
+      async deleteProduct(id) { const { error } = await sb.rpc('delete_product', { p_id: id }); fail(error); },
       async saveProduct(p) {
         const row = { category: p.category, name: p.name, price: p.price, min_stock: p.min_stock, active: p.active, sort: p.sort };
         const q = p.id ? sb.from('products').update(row).eq('id', p.id) : sb.from('products').insert({ ...row, stock: 0 });
@@ -494,6 +495,7 @@
       async listActivity(fromIso) { return clone((load().log || []).filter(x => x.at >= fromIso).reverse()); },
 
       async listProducts() { return clone(load().products).sort((a, b) => a.sort - b.sort || a.id - b.id); },
+      async deleteProduct(id) { const p = load().products.find(x => x.id === id); if (p) p.deleted_at = new Date().toISOString(); save(); },
       async saveProduct(p) {
         const db = load();
         if (p.id) Object.assign(db.products.find(x => x.id === p.id), p);
