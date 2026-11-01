@@ -512,6 +512,14 @@
     $('custSum').textContent = name || wa ? [name, wa].filter(Boolean).join(' · ') : '(opsional) nama & WA';
   }
   ['custName', 'custWa'].forEach(id => $(id).addEventListener('input', syncCustBox));
+  // Catatan dilipat; terbuka kalau sudah ada isinya (mis. saat ubah nota)
+  function syncNoteBox() {
+    const v = $('orderNote').value.trim();
+    if (v) $('noteBox').open = true;
+    $('noteSum').textContent = v ? (v.length > 40 ? v.slice(0, 40) + '…' : v) : '(opsional)';
+  }
+  $('orderNote').addEventListener('input', syncNoteBox);
+  $('noteBox').addEventListener('toggle', () => { if ($('noteBox').open && !$('orderNote').value) $('orderNote').focus(); });
   function setFulfill(v) {
     setSeg($('fulfillSeg'), v);
     if (v !== 'langsung') $('custBox').open = true;
@@ -524,8 +532,8 @@
   function resetCart() {
     cart.clear(); editing = null;
     ['custName', 'custWa', 'custAddress', 'orderNote', 'fDate', 'fTime', 'ongkir', 'paid', 'payNow', 'mixQris', 'mixTransfer'].forEach(id => ($(id).value = ''));
-    $('dpCheck').checked = false; PACK_SIZES.forEach(z => pack.set(z, 0)); $('packBox').open = false;
-    setFulfill('langsung'); setPay('tunai');
+    $('dpCheck').checked = false; PACK_SIZES.forEach(z => pack.set(z, 0)); $('packBox').open = false; $('noteBox').open = false; syncNoteBox();
+    setFulfill('langsung'); setPay('qris');
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
     $('cartTitle').textContent = 'Pesanan baru'; $('cartTitle').hidden = true; $('editBanner').hidden = true;
@@ -542,7 +550,7 @@
       oldQty: new Map(o.order_items.map(i => [i.product_id, i.qty])),
     };
     o.order_items.forEach(i => { if (i.product_id != null) cart.set(i.product_id, (cart.get(i.product_id) || 0) + i.qty); });
-    $('custName').value = o.customer_name || ''; $('custWa').value = o.customer_wa || ''; $('orderNote').value = o.note || '';
+    $('custName').value = o.customer_name || ''; $('custWa').value = o.customer_wa || ''; $('orderNote').value = o.note || ''; syncNoteBox();
     setFulfill(o.fulfillment);
     $('fDate').value = o.fulfill_date || ''; showTime((o.fulfill_time || '').replace(/\D/g, '').slice(0, 4));
     $('ongkir').value = o.ongkir ? rp(o.ongkir) : '';
