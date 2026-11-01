@@ -1041,13 +1041,3 @@ body:not(.can-laci) .need-laci { display: none !important; }
 @media (max-width: 560px) {
   .save-bar { bottom: calc(42px + env(safe-area-inset-bottom)); }
 }
-
-/* Judul keranjang dengan tombol Simpan & cetak di sampingnya */
-.cart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin: 0 -18px 6px; padding: 10px 12px 10px 18px; background: var(--grad-amoy); z-index: 3; }
-.cart .cart-head #cartTitle { margin: 0; padding: 0; background: none; min-width: 0; }
-.cart-head-btn { flex: none; border: 0; border-radius: 999px; padding: 9px 16px; background: #fff; color: var(--amoy);
-  font-weight: 800; font-size: 14px; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
-.cart-head-btn:hover { background: #fff5f0; }
-.cart-head-btn:active { transform: translateY(1px); }
-@media (min-width: 901px) { .cart-head { position: sticky; top: 0; } }
