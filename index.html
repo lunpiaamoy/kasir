@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=84">
+<link rel="stylesheet" href="style.css?v=86">
 </head>
 <body>
 
@@ -97,7 +97,10 @@
       <div class="catalog" id="catalog"><p class="muted">Memuat produk…</p></div>
 
       <aside class="cart" aria-label="Pesanan baru">
-        <h2 id="cartTitle">Pesanan baru</h2>
+        <div class="cart-head">
+          <h2 id="cartTitle">Pesanan baru</h2>
+          <button type="button" class="cart-head-btn" id="saveTopBtn">Simpan &amp; cetak</button>
+        </div>
         <div class="edit-banner" id="editBanner" hidden></div>
         <div class="cart-items" id="cartItems"></div>
 
@@ -169,8 +172,10 @@
           <input id="orderNote" autocomplete="off" maxlength="200" placeholder="mis. digoreng kering, tanpa sambal">
         </div>
 
-        <button class="primary big" id="saveBtn">Simpan &amp; cetak struk</button>
-        <p class="error" id="cartError" role="alert"></p>
+        <div class="save-bar">
+          <button class="primary big" id="saveBtn">Simpan &amp; cetak struk</button>
+          <p class="error" id="cartError" role="alert"></p>
+        </div>
       </aside>
     </div>
     <button class="cart-jump" id="cartJump" hidden>Lihat pesanan <span id="cartJumpCount"></span><b id="cartJumpTotal"></b></button>
@@ -310,6 +315,7 @@
         <button type="button" data-range="today" aria-checked="false">Hari ini</button>
         <button type="button" data-range="yesterday" aria-checked="false">Kemarin</button>
         <button type="button" data-range="7d" aria-checked="false">7 hari</button>
+        <button type="button" data-range="30d" aria-checked="false">30 hari</button>
         <button type="button" data-range="month" aria-checked="true">Bulan ini</button>
         <button type="button" data-range="year" aria-checked="false">Tahun ini</button>
         <button type="button" data-range="lastyear" aria-checked="false">Tahun lalu</button>
@@ -355,6 +361,7 @@
         <button type="button" data-range="today" aria-checked="true">Hari ini</button>
         <button type="button" data-range="yesterday" aria-checked="false">Kemarin</button>
         <button type="button" data-range="7d" aria-checked="false">7 hari</button>
+        <button type="button" data-range="30d" aria-checked="false">30 hari</button>
         <button type="button" data-range="month" aria-checked="false">Bulan ini</button>
         <button type="button" data-range="year" aria-checked="false">Tahun ini</button>
         <button type="button" data-range="lastyear" aria-checked="false">Tahun lalu</button>
@@ -445,10 +452,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=84"></script>
-<script src="db.js?v=84"></script>
-<script src="printer.js?v=84"></script>
-<script src="app.js?v=84"></script>
+<script src="config.js?v=86"></script>
+<script src="db.js?v=86"></script>
+<script src="printer.js?v=86"></script>
+<script src="app.js?v=86"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

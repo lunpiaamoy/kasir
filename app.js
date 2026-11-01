@@ -337,6 +337,7 @@
 
   function renderCart() {
     syncCustBox();
+    if (cart.size) $('cartError').textContent = '';
     for (const id of [...cart.keys()]) if (!byId(id)) cart.delete(id);
     if (!cart.size) {
       $('cartItems').innerHTML = `<div class="cart-empty">Ketuk produk untuk menambahkan ke pesanan.</div>`;
@@ -528,7 +529,7 @@
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
     $('cartTitle').textContent = 'Pesanan baru'; $('editBanner').hidden = true;
-    $('saveBtn').textContent = 'Simpan & cetak struk';
+    $('saveBtn').textContent = 'Simpan & cetak struk'; $('saveTopBtn').textContent = 'Simpan & cetak';
     renderCatalog(); renderCart();
   }
 
@@ -576,14 +577,16 @@
       if (editing?.order.id === o.id) $('seqGaps').textContent = gaps.length
         ? `Nomor terloncat: ${gaps.map(n => String(n).padStart(5, '0')).join(', ')}${gaps.length === 12 ? ', …' : ''}` : 'Tidak ada nomor terloncat.';
     }).catch(() => {});
-    $('saveBtn').textContent = 'Simpan perubahan';
+    $('saveBtn').textContent = 'Simpan perubahan'; $('saveTopBtn').textContent = 'Simpan perubahan';
     openTab('kasir');
     document.querySelector('.cart').scrollIntoView({ block: 'start' });
   }
   $('editBanner').addEventListener('click', e => { if (e.target.id === 'cancelEditBtn') resetCart(); });
 
+  // Tombol kecil di samping judul "Pesanan baru" = tombol Simpan & cetak di bawah
+  $('saveTopBtn').addEventListener('click', () => { if (!$('saveBtn').disabled) $('saveBtn').click(); });
   $('saveBtn').addEventListener('click', async () => {
-    const err = m => ($('cartError').textContent = m);
+    const err = m => { $('cartError').textContent = m; toast(m, true); };
     err('');
     const total = cartTotal();
     const ful = segValue($('fulfillSeg')), pay = segValue($('paySeg'));
@@ -1426,6 +1429,7 @@
     if (key === 'today') return [start, new Date(+start + day)];
     if (key === 'yesterday') return [new Date(+start - day), start];
     if (key === '7d') return [new Date(+start - 6 * day), new Date(+start + day)];
+    if (key === '30d') return [new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29), new Date(+start + day)];
     if (key === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(+start + day)];
     if (key === 'year') return [new Date(now.getFullYear(), 0, 1), new Date(+start + day)];
     if (key === 'lastyear') return [new Date(now.getFullYear() - 1, 0, 1), new Date(now.getFullYear(), 0, 1)];
