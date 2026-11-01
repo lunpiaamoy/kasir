@@ -1052,3 +1052,16 @@ body:not(.can-laci) .need-laci { display: none !important; }
 .cart-items .line .l-sub { color: #fff; }
 .cart-items .cart-empty { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .4); color: #fff; }
 @media print { .cart-items { background: none !important; color: #000 !important; } }
+
+/* Kasir: sapaan & pemberitahuan ringkas supaya produk dan keranjang tetap terlihat di layar pertama */
+.hello-bar { margin-bottom: 8px; }
+.hello-hi { font-size: 17px; }
+@media (max-width: 820px) { .hello-hi { font-size: 16px; } }
+#kasirNotices { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+#kasirNotices:not(:empty) { margin-bottom: 10px; }
+#kasirNotices .notice { margin: 0; padding: 4px 30px 4px 12px; font-size: 12.5px; line-height: 1.4; border-radius: 12px; flex: 0 1 auto;
+  border: 1px solid var(--line); }
+#kasirNotices .notice::before { display: none; }
+#kasirNotices .notice.warn { border-color: #f0d9a8; }
+#kasirNotices .notice.bad { border-color: #f3c4bf; }
+#kasirNotices .notice-x { width: 22px; height: 22px; font-size: 15px; right: 4px; }
