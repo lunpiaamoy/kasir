@@ -2117,9 +2117,8 @@
     if (isOwner()) {
       const last = await DB.lastBackup().catch(() => undefined);
       const days = last ? Math.floor((Date.now() - new Date(last)) / 864e5) : null;
-      if (last === null || days > 7) items.push(`<div class="notice warn">${last === null ? '<b>Belum pernah mengunduh cadangan data.</b>'
-        : `<b>Cadangan data terakhir ${days} hari lalu.</b>`} Simpan cadangan seminggu sekali supaya data aman.
-        <button class="link" data-backup-now>Unduh cadangan sekarang</button></div>`);
+      if (last === null || days > 7) items.push(`<div class="notice warn">${last === null ? '<b>Cadangan data</b> belum pernah diunduh.'
+        : `<b>Cadangan data</b> terakhir ${days} hari lalu.`} <button class="link" data-backup-now>Unduh</button></div>`);
     }
     // Pantauan pemilik: kejadian sensitif hari ini & selisih kas kemarin
     if (isOwner()) {
@@ -2139,7 +2138,7 @@
     if (can('pembelian_catat')) {
       const from = ymdLocal(new Date(Date.now() - 7 * 864e5));
       const prods = await DB.listProductions(from, today).catch(() => null);
-      if (prods && !prods.length) items.push(`<div class="notice" data-key="prod">Belum ada catatan <b>produksi</b> 7 hari terakhir. Catat supaya stok &amp; laba akurat. <button class="link" data-goto="pembelian">Catat</button></div>`);
+      if (prods && !prods.length) items.push(`<div class="notice" data-key="prod"><b>Produksi</b> 7 hari terakhir belum dicatat. <button class="link" data-goto="pembelian">Catat</button></div>`);
     }
     // Pemberitahuan bisa ditutup (×) untuk hari ini, kecuali yang penting (merah)
     const closed = (() => { try { return JSON.parse(localStorage.getItem('lunpiaNoticeClosed') || '{}'); } catch { return {}; } })();
