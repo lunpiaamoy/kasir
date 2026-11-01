@@ -340,7 +340,7 @@
     if (cart.size) $('cartError').textContent = '';
     for (const id of [...cart.keys()]) if (!byId(id)) cart.delete(id);
     if (!cart.size) {
-      $('cartItems').innerHTML = `<div class="cart-empty">Ketuk produk untuk menambahkan ke pesanan.</div>`;
+      $('cartItems').innerHTML = `<div class="cart-empty"><b>Pesanan Baru</b></div>`;
     } else {
       $('cartItems').innerHTML = [...cart].map(([id, q]) => {
         const p = byId(id), avail = p.stock + (editing?.oldQty.get(id) || 0);
