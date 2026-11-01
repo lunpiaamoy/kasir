@@ -217,6 +217,16 @@
       async listCustomers() {
         return all(() => sb.from('orders').select('*').order('id'));   // '*': tetap jalan walau kolom address (005) belum ada
       },
+      // Riwayat belanja satu kontak (023), terbaru dulu; null = database belum diperbarui
+      async contactOrders(key) {
+        const { data, error } = await withPay(async () => {
+          const r = await sb.rpc('contact_orders', { p_key: key }).select(ORDER_SEL());
+          if (r.error && /order_payments/.test(r.error.message || '')) throw r.error;
+          return r;
+        });
+        if (error && ['PGRST202', '42883'].includes(error.code)) return null;
+        fail(error); return data;
+      },
       // Ringkasan kontak dihitung di database (020); null = belum diperbarui → app menghitung sendiri
       async contactSummary() {
         const rows = [];
@@ -654,6 +664,10 @@
         return clone(load().orders).map(({ order_items, ...o }) => o);
       },
       async contactSummary() { return null; },
+      async contactOrders(key) {
+        const wa = s => String(s || '').replace(/\D/g, '').replace(/^0/, '62');
+        return clone(load().orders).filter(o => key && wa(o.customer_wa) === key).sort((a, b) => b.created_at.localeCompare(a.created_at));
+      },
       async markDone(id) { const o = load().orders.find(x => x.id === id); if (o?.status === 'menunggu') o.status = 'selesai'; save(); },
       async cancelOrder(id, reason = '') {
         const db = load(); const o = db.orders.find(x => x.id === id);

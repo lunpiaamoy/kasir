@@ -1076,6 +1076,7 @@
           <td class="num">${rp(c.spent)}</td>
           <td data-sort="${esc(c.last)}">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</td>
           <td><div class="add-stock">
+            ${iconBtn('card', 'plain', `data-history="${i}"`, 'Riwayat belanja')}
             ${iconBtn('order', 'main', `data-neworder="${i}"`, 'Pesan baru')}
             ${c.wa ? waLink(c.wa, c.name, 'ghost small btn-link', 'WhatsApp') : ''}
             ${iconBtn('edit', 'plain need-kontak_ubah', `data-contactedit="${i}"`, 'Ubah kontak')}
@@ -1084,6 +1085,37 @@
         </tr>`;
       }).join('') : '<tr><td class="empty" colspan="6">Belum ada kontak. Pembeli yang punya nomor WA akan muncul di sini.</td></tr>'}</tbody>`;
     filterContacts();
+  }
+  // Riwayat belanja: baris di bawah kontak, klik lagi untuk menutup. Klik nomor nota untuk melihat struknya.
+  const historyCache = new Map();
+  async function toggleHistory(c, row) {
+    const open = row.nextElementSibling?.classList.contains('history-row');
+    $('contactTable').querySelectorAll('.history-row').forEach(r => r.remove());
+    if (open) return;
+    row.insertAdjacentHTML('afterend', `<tr class="history-row"><td colspan="6"><div class="history muted">Memuat riwayat…</div></td></tr>`);
+    const box = row.nextElementSibling.querySelector('.history');
+    let list;
+    try { list = await DB.contactOrders(c.key); } catch (e) { box.textContent = e.message; return; }
+    if (list === null) { box.textContent = 'Riwayat belum tersedia. Tunggu pembaruan database otomatis (file 023) selesai, lalu tekan ↻.'; return; }
+    list.forEach(o => historyCache.set(o.id, o));
+    const ok = list.filter(o => o.status !== 'batal');
+    const pcs = ok.reduce((s, o) => s + o.order_items.reduce((t, i) => t + i.qty, 0), 0);
+    // Produk favorit: paling banyak dibeli
+    const fav = new Map();
+    ok.forEach(o => o.order_items.forEach(i => { const k = `${i.category} ${i.name}`; fav.set(k, (fav.get(k) || 0) + i.qty); }));
+    const top = [...fav].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, q]) => `${esc(k)} (${q})`).join(', ');
+    box.classList.remove('muted');
+    box.innerHTML = `<div class="history-sum"><b>${esc(c.name || c.wa)}</b> · ${ok.length} transaksi · ${rp(pcs)} pcs · Rp ${rp(ok.reduce((s, o) => s + o.total, 0))}${top ? ` · Paling sering: ${top}` : ''}</div>
+      <div class="table-wrap"><table class="table history-table">
+        <thead><tr><th>Tanggal</th><th>Nota</th><th>Isi</th><th class="num">Total</th><th>Bayar</th></tr></thead>
+        <tbody>${list.map(o => { const d = new Date(o.created_at); return `<tr class="${o.status === 'batal' ? 'dim' : ''}">
+          <td data-label="Tanggal">${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}.${pad(d.getMinutes())}</td>
+          <td data-label="Nota"><button type="button" class="link" data-histnota="${o.id}" title="Lihat struk">${notaNo(o)}</button></td>
+          <td data-label="Isi"><span>${o.order_items.map(i => `${esc(i.name)}${i.category ? ` <span class="muted">${esc(i.category)}</span>` : ''} ×${i.qty}`).join(', ')}</span></td>
+          <td data-label="Total" class="num">${rp(o.total)}</td>
+          <td data-label="Bayar">${o.status === 'batal' ? '<span class="chip plain">Batal</span>' : esc(PAY_LABEL[o.pay_method] || o.pay_method)}${o.status !== 'batal' && dueOf(o) ? ` <span class="chip warn">sisa ${rp(dueOf(o))}</span>` : ''}</td>
+        </tr>`; }).join('') || '<tr><td class="empty" colspan="5" data-label="">Belum ada transaksi.</td></tr>'}</tbody>
+      </table></div>`;
   }
   function filterContacts() {
     const q = $('contactSearch').value.trim().toLowerCase(), qn = q.replace(/\D/g, '').replace(/^0/, '62');
@@ -1122,6 +1154,8 @@
         await DB.hideContact(c.key); toast('Kontak dihapus dari daftar'); return renderContacts();
       }
     } catch (err) { return toast(err.message, true); }
+    if (d.history) return toggleHistory(contacts[Number(d.history)], b.closest('tr'));
+    if (d.histnota) return showReceipt(historyCache.get(Number(d.histnota)));
     if (d.neworder) {
       const c = contacts[Number(d.neworder)];
       resetCart();

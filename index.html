@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="style.css?v=93">
+<link rel="stylesheet" href="style.css?v=95">
 </head>
 <body>
 
@@ -91,8 +91,10 @@
 
   <!-- ============ Kasir ============ -->
   <section class="view" id="view-kasir">
-    <div class="hello-bar" id="helloBar"></div>
-    <div class="notices" id="kasirNotices"></div>
+    <div class="kasir-top">
+      <div class="hello-bar" id="helloBar"></div>
+      <div class="notices" id="kasirNotices"></div>
+    </div>
     <div class="pos">
       <div class="catalog" id="catalog"><p class="muted">Memuat produk…</p></div>
 
@@ -449,10 +451,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=93"></script>
-<script src="db.js?v=93"></script>
-<script src="printer.js?v=93"></script>
-<script src="app.js?v=93"></script>
+<script src="config.js?v=95"></script>
+<script src="db.js?v=95"></script>
+<script src="printer.js?v=95"></script>
+<script src="app.js?v=95"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 </body>
 </html>

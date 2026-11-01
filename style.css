@@ -1065,3 +1065,29 @@ body:not(.can-laci) .need-laci { display: none !important; }
 #kasirNotices .notice.warn { border-color: #f0d9a8; }
 #kasirNotices .notice.bad { border-color: #f3c4bf; }
 #kasirNotices .notice-x { width: 22px; height: 22px; font-size: 15px; right: 4px; }
+
+/* Sapaan, pemberitahuan, dan tanggal dalam satu baris */
+.kasir-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 12px; }
+.kasir-top .hello-bar { display: contents; }
+.kasir-top .hello-hi { order: 0; white-space: nowrap; }
+.kasir-top #kasirNotices { order: 1; flex: 1 1 auto; margin: 0; }
+.kasir-top .hello-date { order: 2; margin-left: auto; white-space: nowrap; }
+@media (max-width: 820px) {
+  .kasir-top .hello-date { order: 1; }
+  .kasir-top #kasirNotices { order: 2; flex-basis: 100%; }
+}
+
+/* Riwayat belanja kontak */
+.history-row > td { background: #faf6f0; }
+.history { padding: 6px 2px; }
+.history-sum { font-size: 13px; margin-bottom: 8px; }
+.history-table { font-size: 13px; background: #fff; }
+.history-table td, .history-table th { padding: 6px 10px; }
+@media (max-width: 820px) {
+  #contactTable .history-table, .history-table tbody, .history-table tr { display: block; width: 100%; }
+  #contactTable .history-table thead { display: none; }
+  #contactTable .history-table tr { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  #contactTable .history-table tr:last-child { border-bottom: 0; }
+  #contactTable .history-table td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 2px 0; border: 0; text-align: right; }
+  #contactTable .history-table td::before { content: attr(data-label); flex: none; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; text-align: left; }
+}
