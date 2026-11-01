@@ -525,7 +525,7 @@
     cart.clear(); editing = null;
     ['custName', 'custWa', 'custAddress', 'orderNote', 'fDate', 'fTime', 'ongkir', 'paid', 'payNow', 'mixQris', 'mixTransfer'].forEach(id => ($(id).value = ''));
     $('dpCheck').checked = false; PACK_SIZES.forEach(z => pack.set(z, 0)); $('packBox').open = false;
-    setFulfill('langsung'); setPay('tunai');
+    setFulfill('langsung'); setPay('qris');
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
     $('cartTitle').textContent = 'Pesanan baru'; $('cartTitle').hidden = true; $('editBanner').hidden = true;
