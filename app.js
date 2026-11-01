@@ -528,7 +528,7 @@
     setFulfill('langsung'); setPay('tunai');
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
-    $('cartTitle').textContent = 'Pesanan baru'; $('editBanner').hidden = true;
+    $('cartTitle').textContent = 'Pesanan baru'; $('cartTitle').hidden = true; $('editBanner').hidden = true;
     $('saveBtn').textContent = 'Simpan & cetak struk';
     renderCatalog(); renderCart();
   }
@@ -562,7 +562,7 @@
     (o.packing || []).forEach(x => { if (pack.has(x.size)) pack.set(x.size, x.count); });
     if ((o.packing || []).length) $('packBox').open = true;
     renderPayment();
-    $('cartTitle').textContent = `Ubah nota ${notaNo(o)}`;
+    $('cartTitle').textContent = `Ubah nota ${notaNo(o)}`; $('cartTitle').hidden = false;
     $('editBanner').innerHTML = `Stok dan total dihitung ulang saat disimpan. Harga produk yang sudah ada di nota tetap memakai harga lama.
       ${editing.later ? `<br>Pelunasan <b>Rp ${rp(editing.later)}</b> yang diterima sesudah nota dibuat tetap tercatat; yang diisi di bawah hanya pembayaran awal.` : ''}
       <button class="link" id="cancelEditBtn">Batal ubah</button>
