@@ -1041,3 +1041,14 @@ body:not(.can-laci) .need-laci { display: none !important; }
 @media (max-width: 560px) {
   .save-bar { bottom: calc(42px + env(safe-area-inset-bottom)); }
 }
+
+/* Keranjang tanpa judul "Pesanan baru": daftar barang langsung di atas, berlatar merah.
+   Judul hanya muncul saat mengubah nota ("Ubah nota …"). */
+.cart #cartTitle[hidden] { display: none; }
+.cart-items { margin: 0 -18px 4px; padding: 14px 18px; background: var(--grad-amoy); color: #fff; }
+#cartTitle:not([hidden]) + .edit-banner[hidden] + .cart-items { margin-top: -6px; }
+.cart-items .line .l-name small { color: rgba(255, 255, 255, .78); }
+.cart-items .line .l-warn { color: #ffd98a; }
+.cart-items .line .l-sub { color: #fff; }
+.cart-items .cart-empty { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .4); color: #fff; }
+@media print { .cart-items { background: none !important; color: #000 !important; } }
