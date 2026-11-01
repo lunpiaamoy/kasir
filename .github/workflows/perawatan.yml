@@ -34,6 +34,7 @@ jobs:
           if [ -z "$BACKUP_PASSWORD" ]; then
             echo "::warning::Secret BACKUP_PASSWORD belum diisi, cadangan dilewati (tidak disimpan tanpa password)."; exit 0
           fi
+          set -o pipefail   # gagal kalau pg_dump gagal (bukan menyimpan cadangan kosong)
           mkdir -p cadangan && umask 077
           nama="lunpia-$(TZ=Asia/Jakarta date +%Y-%m-%d)"
           # pg_dump versi 17 dari docker supaya cocok dengan versi database Supabase
@@ -41,7 +42,7 @@ jobs:
             pg_dump "$DATABASE_URL" --schema=public --no-owner --no-privileges \
             | gzip -9 | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSWORD \
             > "cadangan/$nama.sql.gz.enc"
-          test -s "cadangan/$nama.sql.gz.enc"
+          test "$(stat -c %s "cadangan/$nama.sql.gz.enc")" -gt 1000   # cadangan berisi data, bukan kosong
           ls -l cadangan
           echo "nama=$nama" >> "$GITHUB_OUTPUT"
 
