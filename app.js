@@ -529,7 +529,7 @@
     $('custBox').open = false; syncCustBox(); warnedStock.clear();
     $('cartError').textContent = '';
     $('cartTitle').textContent = 'Pesanan baru'; $('editBanner').hidden = true;
-    $('saveBtn').textContent = 'Simpan & cetak struk'; $('saveTopBtn').textContent = 'Simpan & cetak';
+    $('saveBtn').textContent = 'Simpan & cetak struk';
     renderCatalog(); renderCart();
   }
 
@@ -577,16 +577,14 @@
       if (editing?.order.id === o.id) $('seqGaps').textContent = gaps.length
         ? `Nomor terloncat: ${gaps.map(n => String(n).padStart(5, '0')).join(', ')}${gaps.length === 12 ? ', …' : ''}` : 'Tidak ada nomor terloncat.';
     }).catch(() => {});
-    $('saveBtn').textContent = 'Simpan perubahan'; $('saveTopBtn').textContent = 'Simpan perubahan';
+    $('saveBtn').textContent = 'Simpan perubahan';
     openTab('kasir');
     document.querySelector('.cart').scrollIntoView({ block: 'start' });
   }
   $('editBanner').addEventListener('click', e => { if (e.target.id === 'cancelEditBtn') resetCart(); });
 
-  // Tombol kecil di samping judul "Pesanan baru" = tombol Simpan & cetak di bawah
-  $('saveTopBtn').addEventListener('click', () => { if (!$('saveBtn').disabled) $('saveBtn').click(); });
   $('saveBtn').addEventListener('click', async () => {
-    const err = m => { $('cartError').textContent = m; toast(m, true); };
+    const err = m => ($('cartError').textContent = m);
     err('');
     const total = cartTotal();
     const ful = segValue($('fulfillSeg')), pay = segValue($('paySeg'));
