@@ -1027,3 +1027,17 @@ body:not(.can-laci) .need-laci { display: none !important; }
 .order-row .stock-actions { flex-wrap: nowrap; flex: none; }
 .order-row.dim > span { opacity: .55; }
 .stock-btn:disabled { opacity: .3; cursor: default; }
+
+/* Tombol Simpan & cetak selalu terlihat di bawah keranjang, tanpa harus menggulir sampai ujung */
+.cart { overflow: clip; }
+.save-bar { position: sticky; bottom: 0; z-index: 2; margin: 8px -18px -18px; padding: 10px 18px 14px;
+  background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -6px 14px rgba(74, 28, 22, .06); }
+.save-bar .big { margin-top: 0; width: 100%; }
+.save-bar .error:empty { display: none; }
+.save-bar .error { margin: 8px 0 0; }
+@media (min-width: 901px) {
+  .cart { max-height: calc(100vh - 92px); overflow-y: auto; overscroll-behavior: contain; }
+}
+@media (max-width: 560px) {
+  .save-bar { bottom: calc(42px + env(safe-area-inset-bottom)); }
+}

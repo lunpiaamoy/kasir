@@ -1426,6 +1426,7 @@
     if (key === 'today') return [start, new Date(+start + day)];
     if (key === 'yesterday') return [new Date(+start - day), start];
     if (key === '7d') return [new Date(+start - 6 * day), new Date(+start + day)];
+    if (key === '30d') return [new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29), new Date(+start + day)];
     if (key === 'month') return [new Date(now.getFullYear(), now.getMonth(), 1), new Date(+start + day)];
     if (key === 'year') return [new Date(now.getFullYear(), 0, 1), new Date(+start + day)];
     if (key === 'lastyear') return [new Date(now.getFullYear() - 1, 0, 1), new Date(now.getFullYear(), 0, 1)];
